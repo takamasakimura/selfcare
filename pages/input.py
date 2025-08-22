@@ -130,6 +130,34 @@ st.text_area("アドバイス", key=K["アドバイス"])
 sleep_duration = calculate_sleep_duration(st.session_state[K["就寝時刻"]], st.session_state[K["起床時刻"]])
 st.info(f"睡眠時間（推定）：{sleep_duration:.2f} 時間")
 
+colA, colB = st.columns(2)
+
+with colA:
+    if st.button("本日のデータを復元"):
+        restore_today()
+
+with colB:
+    if st.button("保存する"):
+        record = {
+            "日付": today.isoformat(),
+            "就寝時刻": st.session_state[K["就寝時刻"]].strftime("%H:%M"),
+            "起床時刻": st.session_state[K["起床時刻"]].strftime("%H:%M"),
+            "睡眠時間": round(sleep_duration, 2),
+            "精神的要求（Mental Demand）": int(st.session_state[K["精神的要求（Mental Demand）"]]),
+            "身体的要求（Physical Demand）": int(st.session_state[K["身体的要求（Physical Demand）"]]),
+            "時間的要求（Temporal Demand）": int(st.session_state[K["時間的要求（Temporal Demand）"]]),
+            "努力度（Effort）": int(st.session_state[K["努力度（Effort）"]]),
+            "成果満足度（Performance）": int(st.session_state[K["成果満足度（Performance）"]]),
+            "フラストレーション（Frustration）": int(st.session_state[K["フラストレーション（Frustration）"]]),
+            "体調サイン": st.session_state[K["体調サイン"]],
+            "取り組んだこと": st.session_state[K["取り組んだこと"]],
+            "気づいたこと": st.session_state[K["気づいたこと"]],
+            "アドバイス": st.session_state[K["アドバイス"]],
+        }
+        df = pd.DataFrame([record])
+        save_to_google_sheets(df, "care-log", "2025")
+        st.success("保存しました！")
+
 # ===== 保存ボタン =====
 with colB:
     if st.button("保存する"):
