@@ -1,8 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import streamlit as st
 import pandas as pd
-from utils import calculate_sleep_duration, save_to_google_sheets
-from utils import load_today_record
+from utils import calculate_sleep_duration, save_to_google_sheets, load_today_record, get_google_sheet, get_existing_data_row
 
 st.title("セルフケア入力")
 
@@ -78,20 +77,29 @@ if st.button("保存する"):
     save_to_google_sheets(df, "care-log")
     st.success("保存しました！")
 
-if st.button("今日の入力を復元"):
-    rec = load_today_record("care-log", "2025")
+# --- 復元ボタン ---
+if st.button("今日のデータを復元"):
+    sheet = get_google_sheet()
+    rec = get_existing_data_row(sheet)
     if rec:
-        # シートの列名 → セッションキー の対応表を定義
         mapping = {
-            "就寝": SLEEP_KEY,
-            "起床": WAKE_KEY,
-            "TLX合計": TLX_KEY,
-            "メモ": MEMO_KEY,
+            "就寝時刻": SLEEP_KEY,
+            "起床時刻": WAKE_KEY,
+            "精神的要求（Mental Demand）": MENTAL_KEY,
+            "身体的要求（Physical Demand）": PHYSICAL_KEY,
+            "時間的要求（Temporal Demand）": TEMPORAL_KEY,
+            "努力度（Effort）": EFFORT_KEY,
+            "成果満足度（Performance）": PERFORMANCE_KEY,
+            "フラストレーション（Frustration）": FRUSTRATION_KEY,
+            "体調サイン": SIGN_KEY,
+            "取り組んだこと": TASK_KEY,
+            "気づいたこと": AWARENESS_KEY,
+            "アドバイス": ADVICE_KEY,
         }
         for col, key in mapping.items():
-            if col in rec and rec[col] is not None:
+            if col in rec and rec[col] not in ("", None):
                 st.session_state[key] = rec[col]
-        st.success("本日の入力を復元しました。")
+        st.success("本日のデータを復元しました ✅")
         st.rerun()
     else:
-        st.info("本日の入力はシートに見つかりませんでした。")
+        st.info("本日のデータはシートに存在しません。")
