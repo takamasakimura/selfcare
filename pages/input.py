@@ -10,10 +10,33 @@ JST = timezone(timedelta(hours=9))
 today = datetime.now(JST).date()
 st.write(f"今日の日付：{today}")
 
-SLEEP_KEY = "sleep_time"   # st.time_input(key=SLEEP_KEY)
-WAKE_KEY  = "wake_time"    # st.time_input(key=WAKE_KEY)
-TLX_KEY   = "tlx_total"    # st.number_input(key=TLX_KEY)
-MEMO_KEY  = "memo"         # st.text_area(key=MEMO_KEY)
+# --- UIのキー設定（ここはあなたの既存コードに合わせてください）---
+SLEEP_KEY = "sleep_time"
+WAKE_KEY = "wake_time"
+MENTAL_KEY = "mental_demand"
+PHYSICAL_KEY = "physical_demand"
+TEMPORAL_KEY = "temporal_demand"
+EFFORT_KEY = "effort"
+PERFORMANCE_KEY = "performance"
+FRUSTRATION_KEY = "frustration"
+SIGN_KEY = "sign"
+TASK_KEY = "task"
+AWARENESS_KEY = "awareness"
+ADVICE_KEY = "advice"
+
+# --- 入力ウィジェット例 ---
+sleep_time = st.time_input("就寝時刻", key=SLEEP_KEY)
+wake_time = st.time_input("起床時刻", key=WAKE_KEY)
+mental = st.slider("精神的要求（Mental Demand）", 0, 100, 50, key=MENTAL_KEY)
+physical = st.slider("身体的要求（Physical Demand）", 0, 100, 50, key=PHYSICAL_KEY)
+temporal = st.slider("時間的要求（Temporal Demand）", 0, 100, 50, key=TEMPORAL_KEY)
+effort = st.slider("努力度（Effort）", 0, 100, 50, key=EFFORT_KEY)
+performance = st.slider("成果満足度（Performance）", 0, 100, 50, key=PERFORMANCE_KEY)
+frustration = st.slider("フラストレーション（Frustration）", 0, 100, 50, key=FRUSTRATION_KEY)
+sign = st.text_input("体調サイン", key=SIGN_KEY)
+task = st.text_area("取り組んだこと", key=TASK_KEY)
+awareness = st.text_area("気づいたこと", key=AWARENESS_KEY)
+advice = st.text_area("アドバイス", key=ADVICE_KEY)
 
 # 就寝・起床時刻
 col1, col2 = st.columns(2)
