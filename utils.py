@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta, time
 import base64
 import gspread
 from google.oauth2.service_account import Credentials
@@ -9,6 +8,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 from gspread.exceptions import WorksheetNotFound
 from gspread.utils import rowcol_to_a1
+from datetime import date, datetime, time
 
 JST = ZoneInfo("Asia/Tokyo")
 
@@ -29,6 +29,7 @@ EXPECTED_HEADERS = [
     "気づいたこと",
     "アドバイス"
 ]
+
 
 # --- Google Sheets連携 ---
 @st.cache_resource
@@ -63,6 +64,7 @@ def calculate_sleep_duration(bed_time_val, wake_time_val) -> float:
     if w <= b:
         w += timedelta(days=1)
     return round((w - b).total_seconds() / 3600, 2)
+
 
 def load_data():
     sheet = get_google_sheet()
@@ -121,10 +123,6 @@ def save_to_google_sheets(df: pd.DataFrame, spreadsheet_name: str, worksheet_nam
     指定されたスプレッドシートとシートに DataFrame を保存する。
     同じ日付のデータがあれば上書き、なければ追加（Upsert）。
     """
-    import numpy as np
-    from datetime import date, datetime, time
-    from gspread.exceptions import WorksheetNotFound
-    from gspread.utils import rowcol_to_a1
 
     # --- 0) 事前チェック ---
     if df is None or df.empty:
@@ -286,10 +284,10 @@ def load_today_record(spreadsheet_name: str, worksheet_name: str = "2025") -> di
     sh = client.open(spreadsheet_name)
     try:
         sheet = sh.worksheet(worksheet_name)
-    except WorksheetNotFound:
+    except gspread.exceptions.WorksheetNotFound:
         return None
 
-    records = sheet.get_all_records()  # [{列:値}, ...]
+    records = sheet.get_all_records()
     if not records:
         return None
 
@@ -297,30 +295,41 @@ def load_today_record(spreadsheet_name: str, worksheet_name: str = "2025") -> di
     if "日付" not in df.columns:
         return None
 
+    # 日付を正規化
     df["日付"] = pd.to_datetime(df["日付"], errors="coerce").dt.date
-    today = datetime.now(JST).date()
+    today = datetime.now(ZoneInfo("Asia/Tokyo")).date()
     hit = df[df["日付"] == today]
     if hit.empty:
         return None
 
-    row = hit.iloc[-1].to_dict()  # 重複時は最後を採用
+    row = hit.iloc[-1].to_dict()
 
-    # 代表列の型を整える（あなたの列名に合わせて必要分だけ追記）
-    # 例：就寝/起床/合計TLX/メモ など
-    for k in list(row.keys()):
-        if row[k] is None:
-            continue
-        # 時刻文字列 → time
-        if k in ("就寝", "起床"):
-            row[k] = _coerce_time_str_to_time(row[k])
-        # 数値らしき列
-        if k in ("TLX合計", "睡眠時間(h)", "集中スコア"):
-            row[k] = _coerce_num(row[k])
-        # NaN/NaT を空に
+    # 型の調整
+    def _coerce_time(v):
+        if isinstance(v, time):
+            return v
+        if isinstance(v, str) and v:
+            try:
+                return datetime.strptime(v, "%H:%M").time()
+            except Exception:
+                return None
+        return None
+
+    row["就寝時刻"] = _coerce_time(row.get("就寝時刻"))
+    row["起床時刻"] = _coerce_time(row.get("起床時刻"))
+
+    # 数値化（NASA-TLX系）
+    for col in [
+        "精神的要求（Mental Demand）",
+        "身体的要求（Physical Demand）",
+        "時間的要求（Temporal Demand）",
+        "努力度（Effort）",
+        "成果満足度（Performance）",
+        "フラストレーション（Frustration）",
+    ]:
         try:
-            if pd.isna(row[k]):
-                row[k] = None
+            row[col] = int(row[col]) if row[col] != "" else None
         except Exception:
-            pass
+            row[col] = None
 
     return row
