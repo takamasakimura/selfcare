@@ -32,22 +32,30 @@ def get_google_sheet():
     sheet = client.open("care-log").worksheet("2025")
     return sheet
 
-def calculate_sleep_duration(bed_time_str: str, wake_time_str: str) -> float:
+def calculate_sleep_duration(bed_time_val, wake_time_val) -> float:
     """
-    時刻文字列（例: "23:30", "06:15"）から睡眠時間（時間）を計算する。
-    翌日にまたがる睡眠にも対応。
+    "23:30" のような文字列 or datetime.time を受け取り、睡眠時間(h)を返す
     """
-    try:
-        bed_time = datetime.strptime(bed_time_str, "%H:%M")
-        wake_time = datetime.strptime(wake_time_str, "%H:%M")
+    from datetime import time as _time
 
-        if wake_time <= bed_time:
-            wake_time += timedelta(days=1)
+    def _to_time(v):
+        if isinstance(v, _time):
+            return v
+        if isinstance(v, str) and v:
+            return datetime.strptime(v, "%H:%M").time()
+        return None
 
-        duration = wake_time - bed_time
-        return round(duration.total_seconds() / 3600, 2)
-    except Exception:
+    bed_time = _to_time(bed_time_val)
+    wake_time = _to_time(wake_time_val)
+    if not bed_time or not wake_time:
         return 0.0
+
+    today = datetime.today().date()
+    b = datetime.combine(today, bed_time)
+    w = datetime.combine(today, wake_time)
+    if w <= b:
+        w += timedelta(days=1)
+    return round((w - b).total_seconds() / 3600, 2)
 
 def load_data():
     sheet = get_google_sheet()
@@ -102,28 +110,48 @@ def parse_time(s):
         return None
 
 def save_to_google_sheets(df: pd.DataFrame, spreadsheet_name: str, worksheet_name: str = "2025"):
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    scope = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
     creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
     client = gspread.authorize(creds)
 
     sheet = client.open(spreadsheet_name).worksheet(worksheet_name)
-    existing_data = sheet.get_all_records()
-    existing_df = pd.DataFrame(existing_data)
+    records = sheet.get_all_records()
+    existing_df = pd.DataFrame(records)
 
-    if "日付" in existing_df.columns:
-        existing_df["日付"] = pd.to_datetime(existing_df["日付"])
+    if df.empty:
+        st.warning("保存対象が空です。処理をスキップしました。")
+        return
 
-    new_row = df.iloc[0]
-    new_date = pd.to_datetime(new_row["日付"])
+    new_row = df.iloc[0].copy()
+    if "日付" not in df.columns:
+        st.error("DataFrameに『日付』列がありません。")
+        return
 
-    match_index = existing_df[existing_df["日付"] == new_date].index
+    # 日付は date 粒度で突き合わせ
+    new_date = pd.to_datetime(new_row["日付"], errors="coerce").date()
 
-    if len(match_index) > 0:
-        row_number = match_index[0] + 2
-        sheet.delete_rows(row_number)
-        sheet.insert_rows([new_row.tolist()], row_number)
+    if not existing_df.empty and "日付" in existing_df.columns:
+        existing_df["日付"] = pd.to_datetime(existing_df["日付"], errors="coerce").dt.date
     else:
-        sheet.append_row(new_row.tolist())
+        existing_df = pd.DataFrame(columns=list(df.columns))
+
+    match = existing_df.index[existing_df["日付"] == new_date].tolist()
+    row_number = (match[0] + 2) if match else None  # ヘッダー1行ぶん+1
+
+    # シートのヘッダー順に並べ替え
+    header = sheet.row_values(1)
+    ordered = [new_row.get(col, "") for col in header]
+
+    if row_number:
+        # 置換更新
+        end_col = gspread.utils.rowcol_to_a1(1, len(header)).split("1")[0]  # 例: 'D'
+        rng = f"A{row_number}:{end_col}{row_number}"
+        sheet.update(rng, [ordered], value_input_option="USER_ENTERED")
+    else:
+        sheet.append_row(ordered, value_input_option="USER_ENTERED")
 
 # --- アドバイス生成（仮） ---
 def generate_advice(scores, nasa_scores):
