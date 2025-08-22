@@ -3,12 +3,11 @@ import pandas as pd
 import base64
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import datetime, date, time
 from zoneinfo import ZoneInfo
 import numpy as np
 from gspread.exceptions import WorksheetNotFound
 from gspread.utils import rowcol_to_a1
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
 JST = ZoneInfo("Asia/Tokyo")
 
@@ -64,7 +63,6 @@ def calculate_sleep_duration(bed_time_val, wake_time_val) -> float:
     if w <= b:
         w += timedelta(days=1)
     return round((w - b).total_seconds() / 3600, 2)
-
 
 def load_data():
     sheet = get_google_sheet()
