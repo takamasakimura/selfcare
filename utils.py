@@ -29,7 +29,6 @@ EXPECTED_HEADERS = [
     "アドバイス"
 ]
 
-
 # --- Google Sheets連携 ---
 @st.cache_resource
 def get_google_sheet():
@@ -39,30 +38,27 @@ def get_google_sheet():
     sheet = client.open("care-log").worksheet("2025")
     return sheet
 
-def calculate_sleep_duration(bed_time_val, wake_time_val) -> float:
+def calculate_sleep_duration(bed_time, wake_time) -> float:
     """
-    "23:30" のような文字列 or datetime.time を受け取り、睡眠時間(h)を返す
+    datetime.time または "HH:MM" 文字列を受け取り、睡眠時間を計算する。
+    翌日にまたがる睡眠にも対応。
     """
-    from datetime import time as _time
+    try:
+        # 型をそろえる
+        if isinstance(bed_time, str):
+            bed_time = datetime.strptime(bed_time, "%H:%M").time()
+        if isinstance(wake_time, str):
+            wake_time = datetime.strptime(wake_time, "%H:%M").time()
 
-    def _to_time(v):
-        if isinstance(v, _time):
-            return v
-        if isinstance(v, str) and v:
-            return datetime.strptime(v, "%H:%M").time()
-        return None
+        dt_today = datetime.today()
+        b = datetime.combine(dt_today, bed_time)
+        w = datetime.combine(dt_today, wake_time)
+        if w <= b:
+            w += timedelta(days=1)
 
-    bed_time = _to_time(bed_time_val)
-    wake_time = _to_time(wake_time_val)
-    if not bed_time or not wake_time:
+        return round((w - b).seconds / 3600, 2)
+    except Exception:
         return 0.0
-
-    today = datetime.today().date()
-    b = datetime.combine(today, bed_time)
-    w = datetime.combine(today, wake_time)
-    if w <= b:
-        w += timedelta(days=1)
-    return round((w - b).total_seconds() / 3600, 2)
 
 def load_data():
     sheet = get_google_sheet()
@@ -72,11 +68,14 @@ def load_data():
     return df
 
 def get_existing_data_row(sheet):
-    today = datetime.today().strftime("%Y-%m-%d")
-    headers = sheet.row_values(1)
+    today = datetime.now().date()  # datetime.date オブジェクト
     all_data = sheet.get_all_records()
     for row in all_data:
-        if str(row.get("日付", "")) == today:
+        try:
+            row_date = pd.to_datetime(row.get("日付", ""), errors="coerce").date()
+        except Exception:
+            continue
+        if row_date == today:
             return row
     return None
 
