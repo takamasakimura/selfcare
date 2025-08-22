@@ -110,49 +110,112 @@ def parse_time(s):
         return None
 
 def save_to_google_sheets(df: pd.DataFrame, spreadsheet_name: str, worksheet_name: str = "2025"):
+    """
+    指定されたスプレッドシートとシートに DataFrame を保存する。
+    同じ日付のデータがあれば上書き、なければ追加（Upsert）。
+    """
+    import numpy as np
+    from datetime import date, datetime, time
+    from gspread.exceptions import WorksheetNotFound
+    from gspread.utils import rowcol_to_a1
+
+    # --- 0) 事前チェック ---
+    if df is None or df.empty:
+        st.warning("保存対象のデータフレームが空です。処理をスキップしました。")
+        return
+    if "日付" not in df.columns:
+        st.error("DataFrame に『日付』列がありません。")
+        return
+
+    # --- 1) 認証（Secretsから） ---
     scope = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
-    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+    try:
+        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+    except KeyError:
+        st.error("Secrets に gcp_service_account が設定されていません。Settings → Secrets を確認してください。")
+        st.stop()
     client = gspread.authorize(creds)
 
-    sheet = client.open(spreadsheet_name).worksheet(worksheet_name)
-    records = sheet.get_all_records()
-    existing_df = pd.DataFrame(records)
+    # --- 2) ワークシート取得（無ければ作成・ヘッダー初期化） ---
+    sh = client.open(spreadsheet_name)
+    try:
+        sheet = sh.worksheet(worksheet_name)
+    except WorksheetNotFound:
+        sheet = sh.add_worksheet(title=worksheet_name, rows=1000, cols=max(26, len(df.columns)))
+        sheet.update("A1", [list(df.columns)], value_input_option="USER_ENTERED")
 
-    if df.empty:
-        st.warning("保存対象が空です。処理をスキップしました。")
-        return
-
-    new_row = df.iloc[0].copy()
-    if "日付" not in df.columns:
-        st.error("DataFrameに『日付』列がありません。")
-        return
-
-    # 日付は date 粒度で突き合わせ
-    new_date = pd.to_datetime(new_row["日付"], errors="coerce").date()
-
-    if not existing_df.empty and "日付" in existing_df.columns:
-        existing_df["日付"] = pd.to_datetime(existing_df["日付"], errors="coerce").dt.date
-    else:
-        existing_df = pd.DataFrame(columns=list(df.columns))
-
-    match = existing_df.index[existing_df["日付"] == new_date].tolist()
-    row_number = (match[0] + 2) if match else None  # ヘッダー1行ぶん+1
-
-    # シートのヘッダー順に並べ替え
+    # シートのヘッダー
     header = sheet.row_values(1)
-    ordered = [new_row.get(col, "") for col in header]
+    if not header:
+        header = list(df.columns)
+        sheet.update("A1", [header], value_input_option="USER_ENTERED")
 
+    # --- 3) 既存レコード取得（辞書→DataFrame） ---
+    records = sheet.get_all_records()  # 空なら []
+    existing_df = pd.DataFrame(records)
+    if existing_df.empty:
+        existing_df = pd.DataFrame(columns=header)
+
+    # --- 4) 新規行（1行想定）を取り出し ---
+    new_row = df.iloc[0].copy()
+
+    # --- 5) 日付を date 粒度で正規化し、Upsert対象を特定 ---
+    def _to_date_scalar(v):
+        if isinstance(v, (datetime, pd.Timestamp)):
+            return v.date()
+        if isinstance(v, date):
+            return v
+        # 文字列や他型は to_datetime で解釈
+        try:
+            return pd.to_datetime(v, errors="coerce").date()
+        except Exception:
+            return None
+
+    new_date = _to_date_scalar(new_row.get("日付"))
+    if new_date is None:
+        st.error("『日付』の解釈に失敗しました。yyyy-mm-dd 形式などで指定してください。")
+        return
+
+    if "日付" in existing_df.columns and not existing_df.empty:
+        existing_df["日付"] = pd.to_datetime(existing_df["日付"], errors="coerce").dt.date
+        match_idx_list = existing_df.index[existing_df["日付"] == new_date].tolist()
+    else:
+        match_idx_list = []
+
+    row_number = (match_idx_list[0] + 2) if match_idx_list else None  # ヘッダー1行ぶん+1
+
+    # --- 6) JSON化できる値に正規化 ---
+    def _to_jsonable(v):
+        if v is None:
+            return ""
+        if isinstance(v, (pd.Timestamp, datetime, date, time)):
+            return str(v)
+        if isinstance(v, float) and (np.isnan(v) or np.isinf(v)):
+            return ""
+        if isinstance(v, (np.integer, np.floating)):
+            return v.item()
+        # NaN/NaT
+        try:
+            if pd.isna(v):
+                return ""
+        except Exception:
+            pass
+        return v if isinstance(v, (str, int, float, bool)) else str(v)
+
+    # シートのヘッダー順に並べ替え＆正規化
+    ordered = [_to_jsonable(new_row.get(col, "")) for col in header]
+
+    # --- 7) 上書き or 追加 ---
     if row_number:
-        # 置換更新
-        end_col = gspread.utils.rowcol_to_a1(1, len(header)).split("1")[0]  # 例: 'D'
+        end_col = rowcol_to_a1(1, len(header))[:-1]  # 'D1' -> 'D'
         rng = f"A{row_number}:{end_col}{row_number}"
         sheet.update(rng, [ordered], value_input_option="USER_ENTERED")
     else:
         sheet.append_row(ordered, value_input_option="USER_ENTERED")
-
+        
 # --- アドバイス生成（仮） ---
 def generate_advice(scores, nasa_scores):
     return "（アドバイス生成ロジックは後で定義）"
