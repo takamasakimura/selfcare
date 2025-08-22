@@ -51,23 +51,46 @@ with col2:
     wake_time = st.time_input("起床時刻", key=K["起床時刻"])
 
 st.subheader("NASA-TLX（0〜10）")
-st.session_state[K["精神的要求（Mental Demand）"]] = st.slider(
-    "精神的要求（Mental Demand）", 0, 10, st.session_state[K["精神的要求（Mental Demand）"]], key=K["精神的要求（Mental Demand）"]
+mental = st.slider(
+    "精神的要求（Mental Demand）",
+    0, 10,
+    st.session_state[K["精神的要求（Mental Demand）"]],
+    key=K["精神的要求（Mental Demand）"]
 )
-st.session_state[K["身体的要求（Physical Demand）"]] = st.slider(
-    "身体的要求（Physical Demand）", 0, 10, st.session_state[K["身体的要求（Physical Demand）"]], key=K["身体的要求（Physical Demand）"]
+
+physical = st.slider(
+    "身体的要求（Physical Demand）",
+    0, 10,
+    st.session_state[K["身体的要求（Physical Demand）"]],
+    key=K["身体的要求（Physical Demand）"]
 )
-st.session_state[K["時間的要求（Temporal Demand）"]] = st.slider(
-    "時間的要求（Temporal Demand）", 0, 10, st.session_state[K["時間的要求（Temporal Demand）"]], key=K["時間的要求（Temporal Demand）"]
+
+temporal = st.slider(
+    "時間的要求（Temporal Demand）",
+    0, 10,
+    st.session_state[K["時間的要求（Temporal Demand）"]],
+    key=K["時間的要求（Temporal Demand）"]
 )
-st.session_state[K["努力度（Effort）"]] = st.slider(
-    "努力度（Effort）", 0, 10, st.session_state[K["努力度（Effort）"]], key=K["努力度（Effort）"]
+
+effort = st.slider(
+    "努力度（Effort）",
+    0, 10,
+    st.session_state[K["努力度（Effort）"]],
+    key=K["努力度（Effort）"]
 )
-st.session_state[K["成果満足度（Performance）"]] = st.slider(
-    "成果満足度（Performance）", 0, 10, st.session_state[K["成果満足度（Performance）"]], key=K["成果満足度（Performance）"]
+
+performance = st.slider(
+    "成果満足度（Performance）",
+    0, 10,
+    st.session_state[K["成果満足度（Performance）"]],
+    key=K["成果満足度（Performance）"]
 )
-st.session_state[K["フラストレーション（Frustration）"]] = st.slider(
-    "フラストレーション（Frustration）", 0, 10, st.session_state[K["フラストレーション（Frustration）"]], key=K["フラストレーション（Frustration）"]
+
+frustration = st.slider(
+    "フラストレーション（Frustration）",
+    0, 10,
+    st.session_state[K["フラストレーション（Frustration）"]],
+    key=K["フラストレーション（Frustration）"]
 )
 
 st.subheader("体調サイン・メモ")
