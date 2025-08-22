@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 import streamlit as st
 import pandas as pd
 from utils import calculate_sleep_duration, save_to_google_sheets
+from utils import load_today_record
 
 st.title("セルフケア入力")
 
@@ -9,6 +10,11 @@ st.title("セルフケア入力")
 JST = timezone(timedelta(hours=9))
 today = datetime.now(JST).date()
 st.write(f"今日の日付：{today}")
+
+SLEEP_KEY = "sleep_time"   # st.time_input(key=SLEEP_KEY)
+WAKE_KEY  = "wake_time"    # st.time_input(key=WAKE_KEY)
+TLX_KEY   = "tlx_total"    # st.number_input(key=TLX_KEY)
+MEMO_KEY  = "memo"         # st.text_area(key=MEMO_KEY)
 
 # 就寝・起床時刻
 col1, col2 = st.columns(2)
@@ -71,3 +77,21 @@ if st.button("保存する"):
     df = pd.DataFrame([record])  # ← ここで DataFrame を作成
     save_to_google_sheets(df, "care-log")
     st.success("保存しました！")
+
+if st.button("今日の入力を復元"):
+    rec = load_today_record("care-log", "2025")
+    if rec:
+        # シートの列名 → セッションキー の対応表を定義
+        mapping = {
+            "就寝": SLEEP_KEY,
+            "起床": WAKE_KEY,
+            "TLX合計": TLX_KEY,
+            "メモ": MEMO_KEY,
+        }
+        for col, key in mapping.items():
+            if col in rec and rec[col] is not None:
+                st.session_state[key] = rec[col]
+        st.success("本日の入力を復元しました。")
+        st.rerun()
+    else:
+        st.info("本日の入力はシートに見つかりませんでした。")

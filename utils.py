@@ -4,6 +4,13 @@ from datetime import datetime, timedelta, time
 import base64
 import gspread
 from google.oauth2.service_account import Credentials
+from datetime import datetime, date, time
+from zoneinfo import ZoneInfo
+import numpy as np
+from gspread.exceptions import WorksheetNotFound
+from gspread.utils import rowcol_to_a1
+
+JST = ZoneInfo("Asia/Tokyo")
 
 # --- 想定ヘッダー定義 ---
 EXPECTED_HEADERS = [
@@ -215,7 +222,7 @@ def save_to_google_sheets(df: pd.DataFrame, spreadsheet_name: str, worksheet_nam
         sheet.update(rng, [ordered], value_input_option="USER_ENTERED")
     else:
         sheet.append_row(ordered, value_input_option="USER_ENTERED")
-        
+
 # --- アドバイス生成（仮） ---
 def generate_advice(scores, nasa_scores):
     return "（アドバイス生成ロジックは後で定義）"
@@ -243,3 +250,77 @@ def encode_gif_to_base64(gif_path, output_txt_path):
     except Exception as e:
         print("❌ Base64変換失敗:")
         print(e)
+
+def _coerce_time_str_to_time(v):
+    if isinstance(v, time):
+        return v
+    if isinstance(v, str) and v:
+        try:
+            return datetime.strptime(v, "%H:%M").time()
+        except Exception:
+            pass
+    return None
+
+def _coerce_num(v):
+    if v is None: return None
+    try:
+        if isinstance(v, (np.integer,)):
+            return int(v)
+        if isinstance(v, (np.floating,)):
+            return float(v)
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return float(v) if "." in str(v) else int(v)
+    except Exception:
+        return None
+
+def load_today_record(spreadsheet_name: str, worksheet_name: str = "2025") -> dict | None:
+    """JSTの今日に一致する最新行を dict で返す（なければ None）"""
+    scope = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+    client = gspread.authorize(creds)
+
+    sh = client.open(spreadsheet_name)
+    try:
+        sheet = sh.worksheet(worksheet_name)
+    except WorksheetNotFound:
+        return None
+
+    records = sheet.get_all_records()  # [{列:値}, ...]
+    if not records:
+        return None
+
+    df = pd.DataFrame(records)
+    if "日付" not in df.columns:
+        return None
+
+    df["日付"] = pd.to_datetime(df["日付"], errors="coerce").dt.date
+    today = datetime.now(JST).date()
+    hit = df[df["日付"] == today]
+    if hit.empty:
+        return None
+
+    row = hit.iloc[-1].to_dict()  # 重複時は最後を採用
+
+    # 代表列の型を整える（あなたの列名に合わせて必要分だけ追記）
+    # 例：就寝/起床/合計TLX/メモ など
+    for k in list(row.keys()):
+        if row[k] is None:
+            continue
+        # 時刻文字列 → time
+        if k in ("就寝", "起床"):
+            row[k] = _coerce_time_str_to_time(row[k])
+        # 数値らしき列
+        if k in ("TLX合計", "睡眠時間(h)", "集中スコア"):
+            row[k] = _coerce_num(row[k])
+        # NaN/NaT を空に
+        try:
+            if pd.isna(row[k]):
+                row[k] = None
+        except Exception:
+            pass
+
+    return row
