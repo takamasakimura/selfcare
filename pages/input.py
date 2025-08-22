@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time as _time
 import streamlit as st
 import pandas as pd
 from utils import calculate_sleep_duration, save_to_google_sheets, load_today_record  # load_today_record は utils 側に実装済み想定
@@ -42,6 +42,29 @@ _init(K["体調サイン"], "")
 _init(K["取り組んだこと"], "")
 _init(K["気づいたこと"], "")
 _init(K["アドバイス"], "")
+
+def _to_time(v):
+    if isinstance(v, _time):
+        return v
+    if isinstance(v, str) and v.strip():
+        for fmt in ("%H:%M", "%H:%M:%S"):
+            try:
+                return datetime.strptime(v.strip(), fmt).time()
+            except ValueError:
+                continue
+    return None  # 不正なら None（代入スキップ）
+
+def _to_int_0_10(v):
+    try:
+        n = int(float(v))
+        return max(0, min(10, n))
+    except Exception:
+        return None
+
+def _to_str(v):
+    if v is None:
+        return ""
+    return str(v)
 
 # ===== 入力ウィジェット =====
 col1, col2 = st.columns(2)
@@ -107,24 +130,6 @@ st.text_area("アドバイス", key=K["アドバイス"])
 sleep_duration = calculate_sleep_duration(st.session_state[K["就寝時刻"]], st.session_state[K["起床時刻"]])
 st.info(f"睡眠時間（推定）：{sleep_duration:.2f} 時間")
 
-# ===== 復元ボタン =====
-def restore_today():
-    rec = load_today_record("care-log", "2025")  # utils.load_today_record を呼び出し（JSTの「本日」1行）
-    if not rec:
-        st.info("本日のデータはシートに見つかりませんでした。")
-        return
-    # 列名→キーのマッピングで一括復元
-    for col, key in K.items():
-        if col in rec and rec[col] not in (None, ""):
-            st.session_state[key] = rec[col]
-    st.success("本日のデータを復元しました。")
-    st.rerun()
-
-colA, colB = st.columns(2)
-with colA:
-    if st.button("本日のデータを復元"):
-        restore_today()
-
 # ===== 保存ボタン =====
 with colB:
     if st.button("保存する"):
@@ -147,3 +152,57 @@ with colB:
         df = pd.DataFrame([record])
         save_to_google_sheets(df, "care-log", "2025")
         st.success("保存しました！")
+
+def restore_today():
+    rec = load_today_record("care-log", "2025")  # utils.load_today_record を呼ぶ
+    if not rec:
+        st.info("本日のデータはシートに見つかりませんでした。")
+        return
+
+    # 列名 → セッションキー
+    mapping = {
+        "就寝時刻": K["就寝時刻"],
+        "起床時刻": K["起床時刻"],
+        "精神的要求（Mental Demand）": K["精神的要求（Mental Demand）"],
+        "身体的要求（Physical Demand）": K["身体的要求（Physical Demand）"],
+        "時間的要求（Temporal Demand）": K["時間的要求（Temporal Demand）"],
+        "努力度（Effort）": K["努力度（Effort）"],
+        "成果満足度（Performance）": K["成果満足度（Performance）"],
+        "フラストレーション（Frustration）": K["フラストレーション（Frustration）"],
+        "体調サイン": K["体調サイン"],
+        "取り組んだこと": K["取り組んだこと"],
+        "気づいたこと": K["気づいたこと"],
+        "アドバイス": K["アドバイス"],
+    }
+
+    # 期待型を指定（ここが肝）
+    casters = {
+        K["就寝時刻"]: _to_time,
+        K["起床時刻"]: _to_time,
+        K["精神的要求（Mental Demand）"]: _to_int_0_10,
+        K["身体的要求（Physical Demand）"]: _to_int_0_10,
+        K["時間的要求（Temporal Demand）"]: _to_int_0_10,
+        K["努力度（Effort）"]: _to_int_0_10,
+        K["成果満足度（Performance）"]: _to_int_0_10,
+        K["フラストレーション（Frustration）"]: _to_int_0_10,
+        K["体調サイン"]: _to_str,
+        K["取り組んだこと"]: _to_str,
+        K["気づいたこと"]: _to_str,
+        K["アドバイス"]: _to_str,
+    }
+
+    # 値を型変換してから session_state に入れる
+    updated = {}
+    for col, key in mapping.items():
+        if col not in rec:
+            continue
+        cast = casters.get(key, lambda x: x)
+        val = cast(rec[col])
+        # 型が合わない/変換失敗(None)はスキップして安全側に
+        if val is not None:
+            updated[key] = val
+
+    # まとめて更新してから rerun
+    st.session_state.update(updated)
+    st.success("本日のデータを復元しました。")
+    st.rerun()
