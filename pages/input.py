@@ -179,7 +179,33 @@ def restore_today():
             # 型が違う（ありえない想定）なら無視
 
     if updated:
-        st.session_state.update(updated)
+        # st.session_state.update(updated) はやめる
+        for key, val in updated.items():
+            try:
+                # NumPy 型や NaN を安全に文字列化
+                if val is None:
+                    val_str = ""
+                else:
+                    # NaN 対策
+                    try:
+                        import math
+                        if isinstance(val, float) and math.isnan(val):
+                            val_str = ""
+                        else:
+                            val_str = str(val)
+                    except Exception:
+                        val_str = str(val)
+
+                # 既存のウィジェット値が str なら代入
+                cur = st.session_state.get(key, "")
+                if isinstance(cur, str):
+                    st.session_state[key] = val_str
+                else:
+                    st.toast(f"復元スキップ: {key}（ウィジェット型が str ではない）")
+
+            except Exception as e:
+                st.toast(f"復元エラー: {key} → {e}")
+
         st.success("テキスト項目だけ復元しました。")
         st.rerun()
     else:
