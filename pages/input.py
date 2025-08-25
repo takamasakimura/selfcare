@@ -187,11 +187,13 @@ def restore_today():
     }
 
     # 1) まず期待型へキャスト
+    # 1) まず期待型へキャスト
     casted = {}
     dbg = {}
     for col, key in mapping.items():
         if col in rec:
             will = _cast_for_key(key, rec[col])
+            casted[key] = will  # ★これが抜けていた！
             cur = st.session_state.get(key, None)
             dbg[key] = {
                 "sheet_raw": rec[col],
