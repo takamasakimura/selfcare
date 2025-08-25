@@ -127,18 +127,27 @@ def _cast_for_key(key, v):
     return v
 
 def _safe_set_state(key, val):
+    # None はスキップ
     if val is None:
-        return  # 変換失敗は無視
+        st.toast(f"復元スキップ: {key}（値が None）")
+        return
+
+    # 既存の型（ウィジェットが期待する型）を取得
     cur = st.session_state.get(key, None)
-    # Streamlit は型が固定：既存があればその型に合わせる
+
+    # 既存があれば、その型に合わせて再キャストを試みる
     if cur is not None and (type(cur) is not type(val)):
-        # 最後の保険：期待型に合わせ直す
-        val2 = _cast_for_key(key, val)
+        val2 = _cast_for_key(key, val)  # 期待型へ寄せる
         if (val2 is None) or (type(cur) is not type(val2)):
-            st.toast(f"復元スキップ: {key}（型不一致）")
+            st.toast(f"復元スキップ: {key}（型不一致: have={type(cur).__name__}, got={type(val).__name__}）")
             return
         val = val2
-    st.session_state[key] = val
+
+    # ここで最終代入。エラー内容を拾って見える化
+    try:
+        st.session_state[key] = val
+    except Exception as e:
+        st.toast(f"復元エラー: {key} → {type(val).__name__} / {e}")
 
 def restore_today():
     rec = load_today_record("care-log", "2025")
@@ -177,12 +186,23 @@ def restore_today():
         "アドバイス": K["アドバイス"],
     }
 
+
+
     # 1) まず期待型へキャスト
     casted = {}
+    dbg = {}
     for col, key in mapping.items():
-        if col not in rec:
-            continue
-        casted[key] = _cast_for_key(key, rec[col])
+        if col in rec:
+            will = _cast_for_key(key, rec[col])
+            cur = st.session_state.get(key, None)
+            dbg[key] = {
+                "sheet_raw": rec[col],
+                "sheet_raw_type": type(rec[col]).__name__,
+                "casted": will,
+                "casted_type": type(will).__name__ if will is not None else None,
+                "current_state_type": type(cur).__name__ if cur is not None else None,
+            }
+    st.expander("復元デバッグ").write(dbg)
 
     # 2) セーフに session_state を更新（型不一致は自動スキップ）
     for key, val in casted.items():
