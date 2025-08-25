@@ -150,8 +150,35 @@ def _safe_set_state(key, val):
         st.toast(f"復元エラー: {key} → {type(val).__name__} / {e}")
 
 def restore_today():
-    """スプレッドの列名を正規化して、テキスト項目のみ復元する（安全版）"""
+    """列名を正規化し、テキスト＋スライダー＋時刻（time_input）を復元する"""
     rec_raw = load_today_record("care-log", "2025")
+    if not isinstance(rec_raw, dict) or not rec_raw:
+        st.info("本日のデータはシートに見つかりませんでした。")
+        st.expander("debug: load_today_record result").write(rec_raw)
+        return
+
+    W = {
+        # テキスト
+        "体調サイン": {"key": K["体調サイン"], "kind": "text"},
+        "取り組んだこと": {"key": K["取り組んだこと"], "kind": "text"},
+        "気づいたこと": {"key": K["気づいたこと"], "kind": "text"},
+        "アドバイス": {"key": K["アドバイス"], "kind": "text"},
+
+        # スライダー（0〜10）
+        "精神的要求（Mental Demand）": {"key": K["精神的要求（Mental Demand）"], "kind": "slider", "min": 0, "max": 10},
+        "身体的要求（Physical Demand）": {"key": K["身体的要求（Physical Demand）"], "kind": "slider", "min": 0, "max": 10},
+        "時間的要求（Temporal Demand）": {"key": K["時間的要求（Temporal Demand）"], "kind": "slider", "min": 0, "max": 10},
+        "努力度（Effort）": {"key": K["努力度（Effort）"], "kind": "slider", "min": 0, "max": 10},
+        "成果満足度（Performance）": {"key": K["成果満足度（Performance）"], "kind": "slider", "min": 0, "max": 10},
+        "フラストレーション（Frustration）": {"key": K["フラストレーション（Frustration）"], "kind": "slider", "min": 0,
+                                            "max": 10},
+
+        # 時刻（time_input）
+        "就寝時刻": {"key": K["就寝時刻"], "kind": "time"},
+        "起床時刻": {"key": K["起床時刻"], "kind": "time"},
+
+        # ※「睡眠時間」は算出列なので触らない
+    }
 
     # 1) そもそもレコードが無い（= 今日の行が無い）時は即終了
     if not isinstance(rec_raw, dict) or not rec_raw:
@@ -162,74 +189,59 @@ def restore_today():
 
     # 2) 列名を正規化（空白や全角括弧の差異を吸収）
     def _norm(s: str) -> str:
-        if not isinstance(s, str):
-            return s
-        s = s.replace("\u3000", " ").replace("　", " ")          # 全角スペース類を半角へ
-        s = s.replace("（", "(").replace("）", ")")               # 全角括弧→半角
+        if not isinstance(s, str): return s
+        s = s.replace("\u3000", " ").replace("　", " ")
+        s = s.replace("（", "(").replace("）", ")")
         return "".join(s.split())
 
-    # 2) 期待する列名（あなたのヘッダーを“正”として用意）
-    expected = [
-        "日付","就寝時刻","起床時刻","睡眠時間",
-        "精神的要求（Mental Demand）","身体的要求（Physical Demand）",
-        "時間的要求（Temporal Demand）","努力度（Effort）",
-        "成果満足度（Performance）","フラストレーション（Frustration）",
-        "体調サイン","取り組んだこと","気づいたこと","アドバイス",
-    ]
+    expected = list(W.keys()) + ["日付", "睡眠時間"]
     alias = {_norm(name): name for name in expected}
 
-    # 3) 行のキーを“正名”へマッピング
+    # 正式名へ写し替え
     rec = {}
     for k, v in rec_raw.items():
         nk = alias.get(_norm(k))
         if nk:
             rec[nk] = v
 
-    # デバッグ用（必要なら一時的に表示）
     st.expander("debug: keys mapping").write({
         "raw_keys": list(rec_raw.keys()),
         "mapped_keys": list(rec.keys()),
     })
 
-    # 4) テキスト項目だけ復元（※算出列「睡眠時間」は触らない）
-    text_mapping = {
-        "体調サイン": K["体調サイン"],
-        "取り組んだこと": K["取り組んだこと"],
-        "気づいたこと": K["気づいたこと"],
-        "アドバイス": K["アドバイス"],
-    }
-
-    def _to_str(v):
-        if v is None:
-            return ""
-        try:
-            import math
-            if isinstance(v, float) and math.isnan(v):
-                return ""
-        except Exception:
-            pass
-        return str(v)
-
-    any_update = False
-    for col, key in text_mapping.items():
+    updated_any = False
+    for col, spec in W.items():
         if col not in rec:
             continue
-        val = _to_str(rec[col])
-        cur = st.session_state.get(key, "")
-        if isinstance(cur, str):
-            try:
-                st.session_state[key] = val
-                any_update = True
-            except Exception as e:
-                st.toast(f"復元エラー: {key} → {e}")
-        else:
-            st.toast(f"復元スキップ: {key}（ウィジェット型が str ではない）")
+        key, kind = spec["key"], spec["kind"]
+        cur = st.session_state.get(key, None)
+        try:
+            if kind == "text":
+                val = _to_str(rec[col])
+                if isinstance(cur, str):
+                    _safe_set_state(key, val); updated_any = True
 
-    if any_update:
-        st.success("テキスト項目だけ復元しました。")
-        st.rerun()
+            elif kind == "slider":
+                val = _to_i010(rec[col])
+                if (val is not None) and isinstance(cur, int):
+                    # 範囲で丸める
+                    lo, hi = spec.get("min", 0), spec.get("max", 10)
+                    val = max(lo, min(hi, val))
+                    _safe_set_state(key, val); updated_any = True
+
+            elif kind == "time":
+                val = _to_time(rec[col])
+                if (val is not None) and isinstance(cur, _time):
+                    _safe_set_state(key, val); updated_any = True
+
+        except Exception as e:
+            st.toast(f"復元スキップ: {col} → {e}")
+
+    if updated_any:
+        st.success("本日のデータを復元しました。")
+        # on_click コールバックなら rerun 不要。ifで呼ぶ方式なら st.rerun() を付けてOK
     else:
-        st.info("復元対象のテキスト項目が見つかりませんでした。")
+        st.info("復元対象に一致する項目がありませんでした。")
 
 # ========= ボタン（横並び）=========
 colA, colB = st.columns(2)
