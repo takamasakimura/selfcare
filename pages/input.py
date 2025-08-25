@@ -18,6 +18,22 @@ K = {
     "アドバイス": "advice",
 }
 
+# ★ここを追加：各セッションキーの“期待型”
+EXPECT = {
+    K["就寝時刻"]: _time,
+    K["起床時刻"]: _time,
+    K["精神的要求（Mental Demand）"]: int,
+    K["身体的要求（Physical Demand）"]: int,
+    K["時間的要求（Temporal Demand）"]: int,
+    K["努力度（Effort）"]: int,
+    K["成果満足度（Performance）"]: int,
+    K["フラストレーション（Frustration）"]: int,
+    K["体調サイン"]: str,
+    K["取り組んだこと"]: str,
+    K["気づいたこと"]: str,
+    K["アドバイス"]: str,
+}
+
 # ========= 初期化（初回だけデフォルトを入れる）=========
 def _init(k, v):
     if k not in st.session_state:
