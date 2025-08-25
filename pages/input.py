@@ -18,12 +18,6 @@ K = {
     "アドバイス": "advice",
 }
 
-# ========= 基本 =========
-st.title("セルフケア入力")
-JST = timezone(timedelta(hours=9))
-today = datetime.now(JST).date()
-st.write(f"今日の日付：{today}")
-
 # ========= 初期化（初回だけデフォルトを入れる）=========
 def _init(k, v):
     if k not in st.session_state:
@@ -36,6 +30,12 @@ for _k in ("精神的要求（Mental Demand）","身体的要求（Physical Dema
     _init(K[_k], 5)
 for _k in ("体調サイン","取り組んだこと","気づいたこと","アドバイス"):
     _init(K[_k], "")
+
+# ========= 基本 =========
+st.title("セルフケア入力")
+JST = timezone(timedelta(hours=9))
+today = datetime.now(JST).date()
+st.write(f"今日の日付：{today}")
 
 # ========= 入力UI（key を付けるのが肝）=========
 col1, col2 = st.columns(2)
