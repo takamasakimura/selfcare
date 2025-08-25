@@ -8,8 +8,38 @@ import numpy as np
 from gspread.exceptions import WorksheetNotFound
 from gspread.utils import rowcol_to_a1
 from datetime import date, datetime, time, timedelta
+import re  # ← 追加
 
 JST = ZoneInfo("Asia/Tokyo")
+
+def _to_date_any(v):
+    """Google Sheets由来の '日付' を最大公約数で date に正規化"""
+    if isinstance(v, (pd.Timestamp, datetime)):
+        return v.date()
+    if isinstance(v, date):
+        return v
+    # シリアル値（1899-12-30起点）
+    if isinstance(v, (int, float)) and not pd.isna(v):
+        try:
+            ts = pd.Timestamp("1899-12-30") + pd.to_timedelta(float(v), unit="D")
+            return ts.date()
+        except Exception:
+            pass
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return None
+        m = re.match(r"^\s*(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日\s*$", s)
+        if m:
+            s = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+        try:
+            return pd.to_datetime(s, errors="raise").date()
+        except Exception:
+            try:
+                return pd.to_datetime(s.split()[0], errors="raise").date()
+            except Exception:
+                return None
+    return None
 
 # --- 想定ヘッダー定義 ---
 EXPECTED_HEADERS = [
@@ -288,48 +318,11 @@ def load_today_record(spreadsheet_name: str, worksheet_name: str = "2025") -> di
     if not records:
         return None
 
-    # JST の今日
     today = datetime.now(JST).date()
 
-    # 後ろ（末尾＝最近）から走査して最初にマッチしたものを返す
+    # 末尾（新しい方）から見て最初に一致した行を返す
     for row in reversed(records):
         d = _to_date_any(row.get("日付"))
         if d == today:
             return row
     return None
-
-    df = pd.DataFrame(records)
-    if "日付" not in df.columns:
-        return None
-
-    row = hit.iloc[-1].to_dict()
-
-    # 型の調整
-    def _coerce_time(v):
-        if isinstance(v, time):
-            return v
-        if isinstance(v, str) and v:
-            try:
-                return datetime.strptime(v, "%H:%M").time()
-            except Exception:
-                return None
-        return None
-
-    row["就寝時刻"] = _coerce_time(row.get("就寝時刻"))
-    row["起床時刻"] = _coerce_time(row.get("起床時刻"))
-
-    # 数値化（NASA-TLX系）
-    for col in [
-        "精神的要求（Mental Demand）",
-        "身体的要求（Physical Demand）",
-        "時間的要求（Temporal Demand）",
-        "努力度（Effort）",
-        "成果満足度（Performance）",
-        "フラストレーション（Frustration）",
-    ]:
-        try:
-            row[col] = int(row[col]) if row[col] != "" else None
-        except Exception:
-            row[col] = None
-
-    return row
