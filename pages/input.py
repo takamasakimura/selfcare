@@ -3,6 +3,18 @@ import streamlit as st
 import pandas as pd
 from utils import calculate_sleep_duration, save_to_google_sheets, load_today_record  # ← 追加
 
+@st.cache_data
+def load_tlx_guide():
+    # CSV の列名に合わせて修正してください
+    # 例: 項目, 説明 なら row["項目"], row["説明"]
+    df = pd.read_csv("nasa_tlx_guide.csv")
+    return {row["item"]: str(row["text"]) for _, row in df.iterrows()}
+
+GUIDE = load_tlx_guide()
+
+def g(name: str, default: str = ""):
+    return GUIDE.get(name, default)
+
 K = {
     "就寝時刻": "sleep_time",
     "起床時刻": "wake_time",
