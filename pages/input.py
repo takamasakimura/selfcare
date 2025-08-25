@@ -150,66 +150,40 @@ def _safe_set_state(key, val):
         st.toast(f"復元エラー: {key} → {type(val).__name__} / {e}")
 
 def restore_today():
+    """テキスト列のみ復元（時刻/スライダー/プルダウンは触らない安全版）"""
     rec = load_today_record("care-log", "2025")
     if not rec:
         st.info("本日のデータはシートに見つかりませんでした。")
         return
 
-    casters = {
-        K["就寝時刻"]: _to_time,
-        K["起床時刻"]: _to_time,
-        K["精神的要求（Mental Demand）"]: _to_i010,
-        K["身体的要求（Physical Demand）"]: _to_i010,
-        K["時間的要求（Temporal Demand）"]: _to_i010,
-        K["努力度（Effort）"]: _to_i010,
-        K["成果満足度（Performance）"]: _to_i010,
-        K["フラストレーション（Frustration）"]: _to_i010,
-        K["体調サイン"]: _to_str,
-        K["取り組んだこと"]: _to_str,
-        K["気づいたこと"]: _to_str,
-        K["アドバイス"]: _to_str,
-    }
-
-    # 列名 → セッションキー
-    mapping = {
-        "就寝時刻": K["就寝時刻"],
-        "起床時刻": K["起床時刻"],
-        "精神的要求（Mental Demand）": K["精神的要求（Mental Demand）"],
-        "身体的要求（Physical Demand）": K["身体的要求（Physical Demand）"],
-        "時間的要求（Temporal Demand）": K["時間的要求（Temporal Demand）"],
-        "努力度（Effort）": K["努力度（Effort）"],
-        "成果満足度（Performance）": K["成果満足度（Performance）"],
-        "フラストレーション（Frustration）": K["フラストレーション（Frustration）"],
+    # シート列名 → セッションキー（テキスト系だけ）
+    text_mapping = {
         "体調サイン": K["体調サイン"],
         "取り組んだこと": K["取り組んだこと"],
         "気づいたこと": K["気づいたこと"],
         "アドバイス": K["アドバイス"],
     }
 
-    # 1) まず期待型へキャスト
-    # 1) まず期待型へキャスト
-    casted = {}
-    dbg = {}
-    for col, key in mapping.items():
+    # 文字列化ユーティリティ
+    def _to_str(v):
+        return "" if v is None else str(v)
+
+    updated = {}
+    for col, key in text_mapping.items():
         if col in rec:
-            will = _cast_for_key(key, rec[col])
-            casted[key] = will  # ★これが抜けていた！
-            cur = st.session_state.get(key, None)
-            dbg[key] = {
-                "sheet_raw": rec[col],
-                "sheet_raw_type": type(rec[col]).__name__,
-                "casted": will,
-                "casted_type": type(will).__name__ if will is not None else None,
-                "current_state_type": type(cur).__name__ if cur is not None else None,
-            }
-    st.expander("復元デバッグ").write(dbg)
+            val = _to_str(rec[col])
+            # 既存ウィジェットが text_input/text_area であれば str を受け付ける
+            cur = st.session_state.get(key, "")
+            if isinstance(cur, str):
+                updated[key] = val
+            # 型が違う（ありえない想定）なら無視
 
-    # 2) セーフに session_state を更新（型不一致は自動スキップ）
-    for key, val in casted.items():
-        _safe_set_state(key, val)
-
-    st.success("本日のデータを復元しました。")
-    st.rerun()
+    if updated:
+        st.session_state.update(updated)
+        st.success("テキスト項目だけ復元しました。")
+        st.rerun()
+    else:
+        st.info("復元対象のテキスト項目が見つかりませんでした。")
 
 # ========= ボタン（横並び）=========
 colA, colB = st.columns(2)
