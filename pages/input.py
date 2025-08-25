@@ -2,28 +2,13 @@ from datetime import datetime, timedelta, timezone, time as _time
 import streamlit as st
 import pandas as pd
 from utils import calculate_sleep_duration, save_to_google_sheets, load_today_record  # ← 追加
+import math
 
 # ========= 基本 =========
 st.title("セルフケア入力")
 JST = timezone(timedelta(hours=9))
 today = datetime.now(JST).date()
 st.write(f"今日の日付：{today}")
-
-# ========= キー定義（列名 → セッションキー）=========
-K = {
-    "就寝時刻": "sleep_time",
-    "起床時刻": "wake_time",
-    "精神的要求（Mental Demand）": "mental_demand",
-    "身体的要求（Physical Demand）": "physical_demand",
-    "時間的要求（Temporal Demand）": "temporal_demand",
-    "努力度（Effort）": "effort",
-    "成果満足度（Performance）": "performance",
-    "フラストレーション（Frustration）": "frustration",
-    "体調サイン": "sign",
-    "取り組んだこと": "task",
-    "気づいたこと": "awareness",
-    "アドバイス": "advice",
-}
 
 # ========= 初期化（初回だけデフォルトを入れる）=========
 def _init(k, v):
@@ -72,7 +57,6 @@ def _calc_sleep():
 sleep_duration = _calc_sleep()
 st.write(f"睡眠時間（推定）：{sleep_duration:.2f} 時間")
 
-# ========= 復元ヘルパー =========
 def _to_time(v):
     if isinstance(v, _time):
         return v
@@ -81,17 +65,65 @@ def _to_time(v):
             try:
                 return datetime.strptime(v.strip(), fmt).time()
             except ValueError:
-                pass
+                continue
     return None
 
 def _to_i010(v):
     try:
-        return max(0, min(10, int(float(v))))
+        # None/NaN対策
+        if v is None:
+            return None
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        n = int(float(v))
+        return max(0, min(10, n))
     except Exception:
         return None
 
 def _to_str(v):
-    return "" if v is None else str(v)
+    if v is None:
+        return ""
+    s = str(v)
+    return s
+
+EXPECT = {
+    K["就寝時刻"]: _time,
+    K["起床時刻"]: _time,
+    K["精神的要求（Mental Demand）"]: int,
+    K["身体的要求（Physical Demand）"]: int,
+    K["時間的要求（Temporal Demand）"]: int,
+    K["努力度（Effort）"]: int,
+    K["成果満足度（Performance）"]: int,
+    K["フラストレーション（Frustration）"]: int,
+    K["体調サイン"]: str,
+    K["取り組んだこと"]: str,
+    K["気づいたこと"]: str,
+    K["アドバイス"]: str,
+}
+
+def _cast_for_key(key, v):
+    et = EXPECT.get(key)
+    if et is _time:
+        return _to_time(v)
+    if et is int:
+        return _to_i010(v)
+    if et is str:
+        return _to_str(v)
+    return v
+
+def _safe_set_state(key, val):
+    if val is None:
+        return  # 変換失敗は無視
+    cur = st.session_state.get(key, None)
+    # Streamlit は型が固定：既存があればその型に合わせる
+    if cur is not None and (type(cur) is not type(val)):
+        # 最後の保険：期待型に合わせ直す
+        val2 = _cast_for_key(key, val)
+        if (val2 is None) or (type(cur) is not type(val2)):
+            st.toast(f"復元スキップ: {key}（型不一致）")
+            return
+        val = val2
+    st.session_state[key] = val
 
 def restore_today():
     rec = load_today_record("care-log", "2025")
@@ -113,6 +145,8 @@ def restore_today():
         K["気づいたこと"]: _to_str,
         K["アドバイス"]: _to_str,
     }
+
+    # 列名 → セッションキー
     mapping = {
         "就寝時刻": K["就寝時刻"],
         "起床時刻": K["起床時刻"],
@@ -128,16 +162,17 @@ def restore_today():
         "アドバイス": K["アドバイス"],
     }
 
-    updated = {}
+    # 1) まず期待型へキャスト
+    casted = {}
     for col, key in mapping.items():
         if col not in rec:
             continue
-        caster = casters.get(key, lambda x: x)
-        val = caster(rec[col])
-        if val is not None:
-            updated[key] = val
+        casted[key] = _cast_for_key(key, rec[col])
 
-    st.session_state.update(updated)
+    # 2) セーフに session_state を更新（型不一致は自動スキップ）
+    for key, val in casted.items():
+        _safe_set_state(key, val)
+
     st.success("本日のデータを復元しました。")
     st.rerun()
 
