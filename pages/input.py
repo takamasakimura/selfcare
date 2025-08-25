@@ -5,38 +5,41 @@ from utils import calculate_sleep_duration, save_to_google_sheets, load_today_re
 
 @st.cache_data
 def load_tlx_guide():
-    import pandas as pd
     df = pd.read_csv("nasa_tlx_guide.csv")
+    # 「スコア」列を見つける（念のため前後空白対応）
+    score_col = next((c for c in df.columns if "スコア" in str(c)), None)
+    if not score_col:
+        raise ValueError(f"CSVに『スコア』列が見つかりません: {list(df.columns)}")
 
-    # 列名の正規化（前後空白削除）
-    norm = {c.strip(): c for c in df.columns}
-
-    # 候補名（どれかが存在すれば採用）
-    item_candidates = ["item", "項目", "label", "name"]
-    text_candidates = ["text", "説明", "desc", "description"]
-
-    item_col = next((norm[n] for n in item_candidates if n in norm), None)
-    text_col = next((norm[n] for n in text_candidates if n in norm), None)
-
-    # どれも見つからなければ「先頭2列」を使うフォールバック
-    if not (item_col and text_col):
-        if len(df.columns) >= 2:
-            item_col, text_col = df.columns[0], df.columns[1]
-        else:
-            raise ValueError(f"nasa_tlx_guide.csv の列名を解釈できません: {list(df.columns)}")
-
-    # 辞書化（文字列に整形）
     guide = {}
-    for _, row in df.iterrows():
-        k = str(row[item_col]).strip()
-        v = "" if pd.isna(row[text_col]) else str(row[text_col]).strip()
-        if k:
-            guide[k] = v
+    # 各TLX列をたどって、スコア→説明 のリストを作る
+    for col in df.columns:
+        if col == score_col:
+            continue
+        block = []
+        # 当該列が NaN の行は無視（末尾のノイズ行も自然に除外される）
+        for _, row in df[[score_col, col]].dropna(subset=[col]).iterrows():
+            score = row[score_col]
+            try:
+                score = int(score)
+            except Exception:
+                # スコアが数字でない場合はそのまま
+                pass
+            text = str(row[col]).strip()
+            if text:
+                block.append(f"- **{score}**: {text}")
+
+        # 一覧をMarkdown化（空なら登録しない）
+        if block:
+            md = "スコアごとの目安：\n\n" + "\n".join(block)
+            guide[col] = md
+
     return guide
 
 GUIDE = load_tlx_guide()
 
 def g(name: str, default: str = ""):
+    # ラベル一致で引く（必要なら正規化もここで噛ませられる）
     return GUIDE.get(name, default)
 
 K = {
@@ -89,14 +92,22 @@ JST = timezone(timedelta(hours=9))
 today = datetime.now(JST).date()
 st.write(f"今日の日付：{today}")
 
-def slider_with_info(label, key, default, guide_text):
+def slider_with_info(label, key, default, guide_text: str):
+    gt = (guide_text or "").strip()  # 空対策
     c1, c2 = st.columns([1, 0.08])
     with c1:
-        val = st.slider(label, 0, 10, default, key=key)
+        val = st.slider(label, 0, 10, default, key=key, help=gt or None)
     with c2:
-        st.markdown(" ")  # 縦位置そろえ
-        with st.popover("ℹ️"):
-            st.markdown(guide_text)
+        st.markdown(" ")  # 縦位置揃え
+        if gt:
+            if hasattr(st, "popover"):
+                with st.popover("ℹ️"):
+                    st.markdown(gt)
+            else:
+                st.caption("ℹ️ " + gt)
+        else:
+            # 中身が無いことを明示
+            st.caption("ℹ️ ガイド未設定")
     return val
 
 # ========= 入力UI（key を付けるのが肝）=========
