@@ -5,10 +5,34 @@ from utils import calculate_sleep_duration, save_to_google_sheets, load_today_re
 
 @st.cache_data
 def load_tlx_guide():
-    # CSV の列名に合わせて修正してください
-    # 例: 項目, 説明 なら row["項目"], row["説明"]
+    import pandas as pd
     df = pd.read_csv("nasa_tlx_guide.csv")
-    return {row["item"]: str(row["text"]) for _, row in df.iterrows()}
+
+    # 列名の正規化（前後空白削除）
+    norm = {c.strip(): c for c in df.columns}
+
+    # 候補名（どれかが存在すれば採用）
+    item_candidates = ["item", "項目", "label", "name"]
+    text_candidates = ["text", "説明", "desc", "description"]
+
+    item_col = next((norm[n] for n in item_candidates if n in norm), None)
+    text_col = next((norm[n] for n in text_candidates if n in norm), None)
+
+    # どれも見つからなければ「先頭2列」を使うフォールバック
+    if not (item_col and text_col):
+        if len(df.columns) >= 2:
+            item_col, text_col = df.columns[0], df.columns[1]
+        else:
+            raise ValueError(f"nasa_tlx_guide.csv の列名を解釈できません: {list(df.columns)}")
+
+    # 辞書化（文字列に整形）
+    guide = {}
+    for _, row in df.iterrows():
+        k = str(row[item_col]).strip()
+        v = "" if pd.isna(row[text_col]) else str(row[text_col]).strip()
+        if k:
+            guide[k] = v
+    return guide
 
 GUIDE = load_tlx_guide()
 
