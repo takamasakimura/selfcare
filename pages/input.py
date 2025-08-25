@@ -2,7 +2,21 @@ from datetime import datetime, timedelta, timezone, time as _time
 import streamlit as st
 import pandas as pd
 from utils import calculate_sleep_duration, save_to_google_sheets, load_today_record  # ← 追加
-import math
+
+K = {
+    "就寝時刻": "sleep_time",
+    "起床時刻": "wake_time",
+    "精神的要求（Mental Demand）": "mental_demand",
+    "身体的要求（Physical Demand）": "physical_demand",
+    "時間的要求（Temporal Demand）": "temporal_demand",
+    "努力度（Effort）": "effort",
+    "成果満足度（Performance）": "performance",
+    "フラストレーション（Frustration）": "frustration",
+    "体調サイン": "sign",
+    "取り組んだこと": "task",
+    "気づいたこと": "awareness",
+    "アドバイス": "advice",
+}
 
 # ========= 基本 =========
 st.title("セルフケア入力")
@@ -85,21 +99,6 @@ def _to_str(v):
         return ""
     s = str(v)
     return s
-
-EXPECT = {
-    K["就寝時刻"]: _time,
-    K["起床時刻"]: _time,
-    K["精神的要求（Mental Demand）"]: int,
-    K["身体的要求（Physical Demand）"]: int,
-    K["時間的要求（Temporal Demand）"]: int,
-    K["努力度（Effort）"]: int,
-    K["成果満足度（Performance）"]: int,
-    K["フラストレーション（Frustration）"]: int,
-    K["体調サイン"]: str,
-    K["取り組んだこと"]: str,
-    K["気づいたこと"]: str,
-    K["アドバイス"]: str,
-}
 
 def _cast_for_key(key, v):
     et = EXPECT.get(key)
