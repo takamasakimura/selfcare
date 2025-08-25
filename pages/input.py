@@ -150,18 +150,23 @@ def _safe_set_state(key, val):
         st.toast(f"復元エラー: {key} → {type(val).__name__} / {e}")
 
 def restore_today():
-    rec = load_today_record("care-log", "2025")
-    if not rec:
-        st.toast("本日のデータは見つかりませんでした。"); return
+    """スプレッドの列名を正規化して、テキスト項目のみ復元する（安全版）"""
+    rec_raw = load_today_record("care-log", "2025")
 
-    # 1) 列名を正規化（空白除去・全角括弧→半角・全角空白→半角 など）
+    # 1) そもそもレコードが無い（= 今日の行が無い）時は即終了
+    if not isinstance(rec_raw, dict) or not rec_raw:
+        st.info("本日のデータはシートに見つかりませんでした。")
+        # デバッグ表示（必要ならコメントアウト）
+        st.expander("debug: load_today_record result").write(rec_raw)
+        return
+
+    # 2) 列名を正規化（空白や全角括弧の差異を吸収）
     def _norm(s: str) -> str:
         if not isinstance(s, str):
             return s
-        s = s.replace("\u3000", " ")        # 全角スペース→半角
-        s = s.replace("（", "(").replace("）", ")")
-        s = s.replace("　", " ")            # 別の全角スペース
-        return "".join(s.split())           # すべての空白を除去
+        s = s.replace("\u3000", " ").replace("　", " ")          # 全角スペース類を半角へ
+        s = s.replace("（", "(").replace("）", ")")               # 全角括弧→半角
+        return "".join(s.split())
 
     # 2) 期待する列名（あなたのヘッダーを“正”として用意）
     expected = [
@@ -171,18 +176,20 @@ def restore_today():
         "成果満足度（Performance）","フラストレーション（Frustration）",
         "体調サイン","取り組んだこと","気づいたこと","アドバイス",
     ]
-    # 正規化→正名 の対応辞書
     alias = {_norm(name): name for name in expected}
 
     # 3) 行のキーを“正名”へマッピング
     rec = {}
     for k, v in rec_raw.items():
         nk = alias.get(_norm(k))
-        if nk:  # 期待に含まれる場合のみ採用
+        if nk:
             rec[nk] = v
 
     # デバッグ用（必要なら一時的に表示）
-    # st.expander("復元デバッグ").write({"raw_keys": list(rec_raw.keys()), "mapped_keys": list(rec.keys())})
+    st.expander("debug: keys mapping").write({
+        "raw_keys": list(rec_raw.keys()),
+        "mapped_keys": list(rec.keys()),
+    })
 
     # 4) テキスト項目だけ復元（※算出列「睡眠時間」は触らない）
     text_mapping = {
@@ -193,9 +200,9 @@ def restore_today():
     }
 
     def _to_str(v):
-        if v is None: return ""
+        if v is None:
+            return ""
         try:
-            # NaN 対策
             import math
             if isinstance(v, float) and math.isnan(v):
                 return ""
@@ -205,17 +212,18 @@ def restore_today():
 
     any_update = False
     for col, key in text_mapping.items():
-        if col in rec:
-            val = _to_str(rec[col])
-            cur = st.session_state.get(key, "")
-            if isinstance(cur, str):
-                try:
-                    st.session_state[key] = val
-                    any_update = True
-                except Exception as e:
-                    st.toast(f"復元エラー: {key} → {e}")
-            else:
-                st.toast(f"復元スキップ: {key}（ウィジェット型が str ではない）")
+        if col not in rec:
+            continue
+        val = _to_str(rec[col])
+        cur = st.session_state.get(key, "")
+        if isinstance(cur, str):
+            try:
+                st.session_state[key] = val
+                any_update = True
+            except Exception as e:
+                st.toast(f"復元エラー: {key} → {e}")
+        else:
+            st.toast(f"復元スキップ: {key}（ウィジェット型が str ではない）")
 
     if any_update:
         st.success("テキスト項目だけ復元しました。")
