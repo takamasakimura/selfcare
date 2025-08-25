@@ -130,6 +130,13 @@ def render_nasa_tlx_slider(label, default):
         st.dataframe(guide, height=200)
     return st.slider(f"{label}（0〜10）", 0, 10, default, key=f"nasa_{label}")
 
+def load_tlx_guide():
+    df = pd.read_csv("nasa_tlx_guide.csv")  # 列: item,label,text など想定
+    # 列名が違う場合はここを合わせてください。例: '項目','説明'
+    # return {行["項目"]: 行["説明"] for _, 行 in df.iterrows()}
+    # ここでは 'item' と 'text' を想定：
+    return {row["item"]: str(row["text"]) for _, row in df.iterrows()}
+
 # --- 睡眠時間関連 ---
 def calc_sleep_hours(sleep, wake):
     dt_today = datetime.today()

@@ -53,6 +53,16 @@ JST = timezone(timedelta(hours=9))
 today = datetime.now(JST).date()
 st.write(f"今日の日付：{today}")
 
+def slider_with_info(label, key, default, guide_text):
+    c1, c2 = st.columns([1, 0.08])
+    with c1:
+        val = st.slider(label, 0, 10, default, key=key)
+    with c2:
+        st.markdown(" ")  # 縦位置そろえ
+        with st.popover("ℹ️"):
+            st.markdown(guide_text)
+    return val
+
 # ========= 入力UI（key を付けるのが肝）=========
 col1, col2 = st.columns(2)
 with col1:
@@ -61,12 +71,47 @@ with col2:
     st.time_input("起床時刻", key=K["起床時刻"])
 
 st.subheader("NASA-TLX評価（0〜10）")
-st.slider("精神的要求（Mental Demand）", 0, 10, st.session_state[K["精神的要求（Mental Demand）"]], key=K["精神的要求（Mental Demand）"])
-st.slider("身体的要求（Physical Demand）", 0, 10, st.session_state[K["身体的要求（Physical Demand）"]], key=K["身体的要求（Physical Demand）"])
-st.slider("時間的要求（Temporal Demand）", 0, 10, st.session_state[K["時間的要求（Temporal Demand）"]], key=K["時間的要求（Temporal Demand）"])
-st.slider("努力度（Effort）", 0, 10, st.session_state[K["努力度（Effort）"]], key=K["努力度（Effort）"])
-st.slider("成果満足度（Performance）", 0, 10, st.session_state[K["成果満足度（Performance）"]], key=K["成果満足度（Performance）"])
-st.slider("フラストレーション（Frustration）", 0, 10, st.session_state[K["フラストレーション（Frustration）"]], key=K["フラストレーション（Frustration）"])
+mental = slider_with_info(
+    "精神的要求（Mental Demand）",
+    K["精神的要求（Mental Demand）"],
+    st.session_state[K["精神的要求（Mental Demand）"]],
+    g("精神的要求（Mental Demand）"),
+)
+
+physical = slider_with_info(
+    "身体的要求（Physical Demand）",
+    K["身体的要求（Physical Demand）"],
+    st.session_state[K["身体的要求（Physical Demand）"]],
+    g("身体的要求（Physical Demand）"),
+)
+
+temporal = slider_with_info(
+    "時間的要求（Temporal Demand）",
+    K["時間的要求（Temporal Demand）"],
+    st.session_state[K["時間的要求（Temporal Demand）"]],
+    g("時間的要求（Temporal Demand）"),
+)
+
+effort = slider_with_info(
+    "努力度（Effort）",
+    K["努力度（Effort）"],
+    st.session_state[K["努力度（Effort）"]],
+    g("努力度（Effort）"),
+)
+
+performance = slider_with_info(
+    "成果満足度（Performance）",
+    K["成果満足度（Performance）"],
+    st.session_state[K["成果満足度（Performance）"]],
+    g("成果満足度（Performance）"),
+)
+
+frustration = slider_with_info(
+    "フラストレーション（Frustration）",
+    K["フラストレーション（Frustration）"],
+    st.session_state[K["フラストレーション（Frustration）"]],
+    g("フラストレーション（Frustration）"),
+)
 
 st.subheader("体調サイン・タグ付きメモ")
 st.text_area("例：＜タグ：頭痛＞ 作業に集中できなかった", key=K["体調サイン"])
@@ -246,8 +291,7 @@ def restore_today():
 # ========= ボタン（横並び）=========
 colA, colB = st.columns(2)
 with colA:
-    if st.button("本日のデータを復元", on_click=restore_today):
-        restore_today()
+    st.button("本日のデータを復元", on_click=restore_today)
 
 with colB:
     if st.button("保存する"):
