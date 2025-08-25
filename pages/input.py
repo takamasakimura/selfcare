@@ -150,11 +150,9 @@ def _safe_set_state(key, val):
         st.toast(f"復元エラー: {key} → {type(val).__name__} / {e}")
 
 def restore_today():
-    """スプレッドの列名を正規化して、テキスト項目のみ復元する"""
-    rec_raw = load_today_record("care-log", "2025")
-    if not rec_raw:
-        st.info("本日のデータはシートに見つかりませんでした。")
-        return
+    rec = load_today_record("care-log", "2025")
+    if not rec:
+        st.toast("本日のデータは見つかりませんでした。"); return
 
     # 1) 列名を正規化（空白除去・全角括弧→半角・全角空白→半角 など）
     def _norm(s: str) -> str:
@@ -228,7 +226,7 @@ def restore_today():
 # ========= ボタン（横並び）=========
 colA, colB = st.columns(2)
 with colA:
-    if st.button("本日のデータを復元"):
+    if st.button("本日のデータを復元", on_click=restore_today):
         restore_today()
 
 with colB:
