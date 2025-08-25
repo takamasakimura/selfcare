@@ -278,25 +278,28 @@ def load_today_record(spreadsheet_name: str, worksheet_name: str = "2025") -> di
     creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
     client = gspread.authorize(creds)
 
-    sh = client.open(spreadsheet_name)
     try:
+        sh = client.open(spreadsheet_name)
         sheet = sh.worksheet(worksheet_name)
-    except gspread.exceptions.WorksheetNotFound:
+    except WorksheetNotFound:
         return None
 
-    records = sheet.get_all_records()
+    records = sheet.get_all_records()  # [{列:値}, ...]
     if not records:
         return None
 
+    # JST の今日
+    today = datetime.now(JST).date()
+
+    # 後ろ（末尾＝最近）から走査して最初にマッチしたものを返す
+    for row in reversed(records):
+        d = _to_date_any(row.get("日付"))
+        if d == today:
+            return row
+    return None
+
     df = pd.DataFrame(records)
     if "日付" not in df.columns:
-        return None
-
-    # 日付を正規化
-    df["日付"] = pd.to_datetime(df["日付"], errors="coerce").dt.date
-    today = datetime.now(ZoneInfo("Asia/Tokyo")).date()
-    hit = df[df["日付"] == today]
-    if hit.empty:
         return None
 
     row = hit.iloc[-1].to_dict()
