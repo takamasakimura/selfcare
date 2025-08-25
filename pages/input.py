@@ -150,13 +150,43 @@ def _safe_set_state(key, val):
         st.toast(f"復元エラー: {key} → {type(val).__name__} / {e}")
 
 def restore_today():
-    """テキスト列のみ復元（時刻/スライダー/プルダウンは触らない安全版）"""
-    rec = load_today_record("care-log", "2025")
-    if not rec:
+    """スプレッドの列名を正規化して、テキスト項目のみ復元する"""
+    rec_raw = load_today_record("care-log", "2025")
+    if not rec_raw:
         st.info("本日のデータはシートに見つかりませんでした。")
         return
 
-    # シート列名 → セッションキー（テキスト系だけ）
+    # 1) 列名を正規化（空白除去・全角括弧→半角・全角空白→半角 など）
+    def _norm(s: str) -> str:
+        if not isinstance(s, str):
+            return s
+        s = s.replace("\u3000", " ")        # 全角スペース→半角
+        s = s.replace("（", "(").replace("）", ")")
+        s = s.replace("　", " ")            # 別の全角スペース
+        return "".join(s.split())           # すべての空白を除去
+
+    # 2) 期待する列名（あなたのヘッダーを“正”として用意）
+    expected = [
+        "日付","就寝時刻","起床時刻","睡眠時間",
+        "精神的要求（Mental Demand）","身体的要求（Physical Demand）",
+        "時間的要求（Temporal Demand）","努力度（Effort）",
+        "成果満足度（Performance）","フラストレーション（Frustration）",
+        "体調サイン","取り組んだこと","気づいたこと","アドバイス",
+    ]
+    # 正規化→正名 の対応辞書
+    alias = {_norm(name): name for name in expected}
+
+    # 3) 行のキーを“正名”へマッピング
+    rec = {}
+    for k, v in rec_raw.items():
+        nk = alias.get(_norm(k))
+        if nk:  # 期待に含まれる場合のみ採用
+            rec[nk] = v
+
+    # デバッグ用（必要なら一時的に表示）
+    # st.expander("復元デバッグ").write({"raw_keys": list(rec_raw.keys()), "mapped_keys": list(rec.keys())})
+
+    # 4) テキスト項目だけ復元（※算出列「睡眠時間」は触らない）
     text_mapping = {
         "体調サイン": K["体調サイン"],
         "取り組んだこと": K["取り組んだこと"],
@@ -164,48 +194,32 @@ def restore_today():
         "アドバイス": K["アドバイス"],
     }
 
-    # 文字列化ユーティリティ
     def _to_str(v):
-        return "" if v is None else str(v)
+        if v is None: return ""
+        try:
+            # NaN 対策
+            import math
+            if isinstance(v, float) and math.isnan(v):
+                return ""
+        except Exception:
+            pass
+        return str(v)
 
-    updated = {}
+    any_update = False
     for col, key in text_mapping.items():
         if col in rec:
             val = _to_str(rec[col])
-            # 既存ウィジェットが text_input/text_area であれば str を受け付ける
             cur = st.session_state.get(key, "")
             if isinstance(cur, str):
-                updated[key] = val
-            # 型が違う（ありえない想定）なら無視
+                try:
+                    st.session_state[key] = val
+                    any_update = True
+                except Exception as e:
+                    st.toast(f"復元エラー: {key} → {e}")
+            else:
+                st.toast(f"復元スキップ: {key}（ウィジェット型が str ではない）")
 
-    if updated:
-        # st.session_state.update(updated) はやめる
-        for key, val in updated.items():
-            try:
-                # NumPy 型や NaN を安全に文字列化
-                if val is None:
-                    val_str = ""
-                else:
-                    # NaN 対策
-                    try:
-                        import math
-                        if isinstance(val, float) and math.isnan(val):
-                            val_str = ""
-                        else:
-                            val_str = str(val)
-                    except Exception:
-                        val_str = str(val)
-
-                # 既存のウィジェット値が str なら代入
-                cur = st.session_state.get(key, "")
-                if isinstance(cur, str):
-                    st.session_state[key] = val_str
-                else:
-                    st.toast(f"復元スキップ: {key}（ウィジェット型が str ではない）")
-
-            except Exception as e:
-                st.toast(f"復元エラー: {key} → {e}")
-
+    if any_update:
         st.success("テキスト項目だけ復元しました。")
         st.rerun()
     else:
