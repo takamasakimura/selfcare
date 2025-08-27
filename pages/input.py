@@ -86,6 +86,24 @@ for _k in ("精神的要求（Mental Demand）","身体的要求（Physical Dema
 for _k in ("体調サイン","取り組んだこと","気づいたこと","アドバイス"):
     _init(K[_k], "")
 
+st.sidebar.markdown("### 🔧一時ツール")
+if st.sidebar.button("キャッシュを全クリア（1回だけ押す）"):
+    try:
+        st.cache_data.clear()
+    except Exception:
+        pass
+    try:
+        st.cache_resource.clear()
+    except Exception:
+        pass
+    # セッションステートも必要最小限でリセット
+    for k in list(st.session_state.keys()):
+        # ここで全部消すのが怖ければ、NASA-TLX関連キーだけ消すなどでもOK
+        if isinstance(k, tuple) or isinstance(k, str):
+            del st.session_state[k]
+    st.success("キャッシュとセッションを初期化しました。自動で再実行します。")
+    st.experimental_rerun()
+
 # ========= 基本 =========
 st.title("セルフケア入力")
 JST = timezone(timedelta(hours=9))
@@ -118,47 +136,47 @@ with col2:
     st.time_input("起床時刻", key=K["起床時刻"])
 
 st.subheader("NASA-TLX評価（0〜10）")
-+ mental = slider_with_info(
-+     "精神的要求（Mental Demand）",
-+     K["精神的要求（Mental Demand）"],
-+     st.session_state[K["精神的要求（Mental Demand）"]],
-+     g("精神的要求（Mental Demand）"),
-+ )
+mental = slider_with_info(
+    "精神的要求（Mental Demand）",
+    K["精神的要求（Mental Demand）"],
+    st.session_state[K["精神的要求（Mental Demand）"], 0],
+    g("精神的要求（Mental Demand）"),
+)
 
-+ physical = slider_with_info(
-+     "身体的要求（Physical Demand）",
-+     K["身体的要求（Physical Demand）"],
-+     st.session_state[K["身体的要求（Physical Demand）"]],
-+     g("身体的要求（Physical Demand）"),
-+ )
+physical = slider_with_info(
+    "身体的要求（Physical Demand）",
+    K["身体的要求（Physical Demand）"],
+    st.session_state[K["身体的要求（Physical Demand）"], 0],
+    g("身体的要求（Physical Demand）"),
+)
 
-+ temporal = slider_with_info(
-+     "時間的要求（Temporal Demand）",
-+     K["時間的要求（Temporal Demand）"],
-+     st.session_state[K["時間的要求（Temporal Demand）"]],
-+     g("時間的要求（Temporal Demand）"),
-+ )
+temporal = slider_with_info(
+    "時間的要求（Temporal Demand）",
+    K["時間的要求（Temporal Demand）"],
+    st.session_state[K["時間的要求（Temporal Demand）"], 0],
+    g("時間的要求（Temporal Demand）"),
+)
 
-+ effort = slider_with_info(
-+     "努力度（Effort）",
-+     K["努力度（Effort）"],
-+     st.session_state[K["努力度（Effort）"]],
-+     g("努力度（Effort）"),
-+ )
+effort = slider_with_info(
+    "努力度（Effort）",
+    K["努力度（Effort）"],
+    st.session_state[K["努力度（Effort）"], 0],
+    g("努力度（Effort）"),
+)
 
-+ performance = slider_with_info(
-+     "成果満足度（Performance）",
-+     K["成果満足度（Performance）"],
-+     st.session_state[K["成果満足度（Performance）"]],
-+     g("成果満足度（Performance）"),
-+ )
+performance = slider_with_info(
+    "成果満足度（Performance）",
+    K["成果満足度（Performance）"],
+    st.session_state[K["成果満足度（Performance）"], 0],
+    g("成果満足度（Performance）"),
+)
 
-+ frustration = slider_with_info(
-+     "フラストレーション（Frustration）",
-+     K["フラストレーション（Frustration）"],
-+     st.session_state[K["フラストレーション（Frustration）"]],
-+     g("フラストレーション（Frustration）"),
-+ )
+frustration = slider_with_info(
+    "フラストレーション（Frustration）",
+    K["フラストレーション（Frustration）"],
+    st.session_state[K["フラストレーション（Frustration）"], 0],
+    g("フラストレーション（Frustration）"),
+)
 
 st.subheader("体調サイン・タグ付きメモ")
 st.text_area("例：＜タグ：頭痛＞ 作業に集中できなかった", key=K["体調サイン"])
