@@ -3,6 +3,27 @@ import streamlit as st
 import pandas as pd
 from utils import calculate_sleep_duration, save_to_google_sheets, load_today_record  # ← 追加
 
+# ==== Debug/maintenance tools ====
+st.sidebar.markdown("### 🔧 メンテ")
+if st.sidebar.button("キャッシュ全クリア"): 
+    try:
+        st.cache_data.clear()
+    except Exception:
+        pass
+    try:
+        st.cache_resource.clear()
+    except Exception:
+        pass
+    for k in list(st.session_state.keys()):
+        try:
+            del st.session_state[k]
+        except Exception:
+            pass
+    st.success("Cleared. 再実行します")
+    st.experimental_rerun()
+st.write("input.py loaded:", __file__)
+
+
 @st.cache_data
 def load_tlx_guide():
     df = pd.read_csv("nasa_tlx_guide.csv")
@@ -121,42 +142,42 @@ st.subheader("NASA-TLX評価（0〜10）")
 mental = slider_with_info(
     "精神的要求（Mental Demand）",
     K["精神的要求（Mental Demand）"],
-    st.session_state[K["精神的要求（Mental Demand）"], 0],
+    st.session_state.get(K["精神的要求（Mental Demand）"], 5),
     g("精神的要求（Mental Demand）"),
 )
 
 physical = slider_with_info(
     "身体的要求（Physical Demand）",
     K["身体的要求（Physical Demand）"],
-    st.session_state[K["身体的要求（Physical Demand）"], 0],
+    st.session_state.get(K["身体的要求（Physical Demand）"], 5),
     g("身体的要求（Physical Demand）"),
 )
 
 temporal = slider_with_info(
     "時間的要求（Temporal Demand）",
     K["時間的要求（Temporal Demand）"],
-    st.session_state[K["時間的要求（Temporal Demand）"], 0],
+    st.session_state.get(K["時間的要求（Temporal Demand）"], 5),
     g("時間的要求（Temporal Demand）"),
 )
 
 effort = slider_with_info(
     "努力度（Effort）",
     K["努力度（Effort）"],
-    st.session_state[K["努力度（Effort）"], 0],
+    st.session_state.get(K["努力度（Effort）"], 5),
     g("努力度（Effort）"),
 )
 
 performance = slider_with_info(
     "成果満足度（Performance）",
     K["成果満足度（Performance）"],
-    st.session_state[K["成果満足度（Performance）"], 0],
+    st.session_state.get(K["成果満足度（Performance）"], 5),
     g("成果満足度（Performance）"),
 )
 
 frustration = slider_with_info(
     "フラストレーション（Frustration）",
     K["フラストレーション（Frustration）"],
-    st.session_state[K["フラストレーション（Frustration）"], 0],
+    st.session_state.get(K["フラストレーション（Frustration）"], 5),
     g("フラストレーション（Frustration）"),
 )
 
