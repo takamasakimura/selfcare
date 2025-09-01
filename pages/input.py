@@ -107,24 +107,6 @@ for _k in ("精神的要求（Mental Demand）","身体的要求（Physical Dema
 for _k in ("体調サイン","取り組んだこと","気づいたこと","アドバイス"):
     _init(K[_k], "")
 
-st.sidebar.markdown("### 🔧一時ツール")
-if st.sidebar.button("キャッシュを全クリア（1回だけ押す）"):
-    try:
-        st.cache_data.clear()
-    except Exception:
-        pass
-    try:
-        st.cache_resource.clear()
-    except Exception:
-        pass
-    # セッションステートも必要最小限でリセット
-    for k in list(st.session_state.keys()):
-        # ここで全部消すのが怖ければ、NASA-TLX関連キーだけ消すなどでもOK
-        if isinstance(k, tuple) or isinstance(k, str):
-            del st.session_state[k]
-    st.success("キャッシュとセッションを初期化しました。自動で再実行します。")
-    st.experimental_rerun()
-
 # ========= 基本 =========
 st.title("セルフケア入力")
 JST = timezone(timedelta(hours=9))
