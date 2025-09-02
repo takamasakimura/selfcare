@@ -74,8 +74,9 @@ K = {
     "フラストレーション（Frustration）": "frustration",
     "体調サイン": "sign",
     "取り組んだこと": "task",
-    "気づいたこと": "awareness",
-    "アドバイス": "advice",
+    "ストレッサー": "stressor",                # ← 置換
+    "シノアのコメント": "comment_shinoa",        # ← 追加
+    "桂花のコメント": "comment_keifa",           # ← 追加
 }
 
 # ★ここを追加：各セッションキーの“期待型”
@@ -90,8 +91,9 @@ EXPECT = {
     K["フラストレーション（Frustration）"]: int,
     K["体調サイン"]: str,
     K["取り組んだこと"]: str,
-    K["気づいたこと"]: str,
-    K["アドバイス"]: str,
+    K["ストレッサー"]: str,               # ← 追加
+    K["シノアのコメント"]: str,           # ← 追加
+    K["桂花のコメント"]: str,              # ← 追加
 }
 
 # ========= 初期化（初回だけデフォルトを入れる）=========
@@ -104,7 +106,7 @@ _init(K["起床時刻"], datetime.strptime("07:00", "%H:%M").time())
 for _k in ("精神的要求（Mental Demand）","身体的要求（Physical Demand）","時間的要求（Temporal Demand）",
            "努力度（Effort）","成果満足度（Performance）","フラストレーション（Frustration）"):
     _init(K[_k], 5)
-for _k in ("体調サイン","取り組んだこと","気づいたこと","アドバイス"):
+for _k in ("体調サイン","取り組んだこと","ストレッサー","シノアのコメント","桂花のコメント"):
     _init(K[_k], "")
 
 # ========= 基本 =========
@@ -274,8 +276,9 @@ def restore_today():
         # テキスト
         "体調サイン": {"key": K["体調サイン"], "kind": "text"},
         "取り組んだこと": {"key": K["取り組んだこと"], "kind": "text"},
-        "気づいたこと": {"key": K["気づいたこと"], "kind": "text"},
-        "アドバイス": {"key": K["アドバイス"], "kind": "text"},
+        "ストレッサー": {"key": K["ストレッサー"], "kind": "text"},
+        "シノアのコメント": {"key": K["シノアのコメント"], "kind": "text"},
+        "桂花のコメント": {"key": K["桂花のコメント"], "kind": "text"},
 
         # スライダー（0〜10）
         "精神的要求（Mental Demand）": {"key": K["精神的要求（Mental Demand）"], "kind": "slider", "min": 0, "max": 10},
@@ -376,8 +379,9 @@ with colB:
             "フラストレーション（Frustration）": int(st.session_state[K["フラストレーション（Frustration）"]]),
             "体調サイン": st.session_state[K["体調サイン"]],
             "取り組んだこと": st.session_state[K["取り組んだこと"]],
-            "気づいたこと": st.session_state[K["気づいたこと"]],
-            "アドバイス": st.session_state[K["アドバイス"]],
+     　　   "ストレッサー": st.session_state[K["ストレッサー"]],
+      　　  "シノアのコメント": st.session_state[K["シノアのコメント"]],
+        　　"桂花のコメント": st.session_state[K["桂花のコメント"]],
         }
         df = pd.DataFrame([record])
         save_to_google_sheets(df, "care-log", "2025")
