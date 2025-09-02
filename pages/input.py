@@ -188,10 +188,11 @@ st.text_area("例：＜タグ：頭痛＞ 作業に集中できなかった", ke
 
 st.subheader("内省ログ")
 st.text_area("取り組んだこと", key=K["取り組んだこと"])
-st.text_area("気づいたこと・感想", key=K["気づいたこと"])
+st.text_area("ストレッサー", key=K["ストレッサー"])
 
-st.subheader("GPTアドバイス（任意）")
-st.text_area("GPTアドバイス（任意）", key=K["アドバイス"])
+st.subheader("コメント")
+st.text_area("シノアのコメント", key=K["シノアのコメント"])
+st.text_area("桂花のコメント", key=K["桂花のコメント"])
 
 # ========= 計算表示 =========
 def _calc_sleep():
@@ -379,9 +380,9 @@ with colB:
             "フラストレーション（Frustration）": int(st.session_state[K["フラストレーション（Frustration）"]]),
             "体調サイン": st.session_state[K["体調サイン"]],
             "取り組んだこと": st.session_state[K["取り組んだこと"]],
-     　　   "ストレッサー": st.session_state[K["ストレッサー"]],
-      　　  "シノアのコメント": st.session_state[K["シノアのコメント"]],
-        　　"桂花のコメント": st.session_state[K["桂花のコメント"]],
+            "ストレッサー": st.session_state[K["ストレッサー"]],
+            "シノアのコメント": st.session_state[K["シノアのコメント"]],
+            "桂花のコメント": st.session_state[K["桂花のコメント"]],
         }
         df = pd.DataFrame([record])
         save_to_google_sheets(df, "care-log", "2025")
