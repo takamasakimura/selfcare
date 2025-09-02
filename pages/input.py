@@ -191,8 +191,8 @@ st.text_area("取り組んだこと", key=K["取り組んだこと"])
 st.text_area("ストレッサー", key=K["ストレッサー"])
 
 st.subheader("コメント")
-st.text_area("シノアのコメント", key=K["シノアのコメント"])
-st.text_area("桂花のコメント", key=K["桂花のコメント"])
+st.text_area("コメント", key=K["シノアのコメント"])
+st.text_area("コメント2", key=K["桂花のコメント"])
 
 # ========= 計算表示 =========
 def _calc_sleep():
