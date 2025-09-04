@@ -360,13 +360,6 @@ def restore_today():
     else:
         st.info("復元対象に一致する項目がありませんでした。")
 
-header = sheet.row_values(1)
-if header != EXPECTED_HEADERS:
-    # 列数を揃えてヘッダーを上書き
-    sheet.resize(rows=1000, cols=len(EXPECTED_HEADERS))
-    sheet.update("A1", [EXPECTED_HEADERS], value_input_option="USER_ENTERED")
-    header = EXPECTED_HEADERS
-
 # ========= ボタン（横並び）=========
 colA, colB = st.columns(2)
 with colA:
