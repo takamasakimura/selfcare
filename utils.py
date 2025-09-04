@@ -43,21 +43,11 @@ def _to_date_any(v):
 
 # --- 想定ヘッダー定義 ---
 EXPECTED_HEADERS = [
-    "日付",
-    "就寝時刻",
-    "起床時刻",
-    "睡眠時間",
-    "精神的要求（Mental Demand）",
-    "身体的要求（Physical Demand）",
-    "時間的要求（Temporal Demand）",
-    "努力度（Effort）",
-    "成果満足度（Performance）",
-    "フラストレーション（Frustration）",
-    "体調サイン",
-    "取り組んだこと",
-    "ストレッサー",
-    "シノアのコメント",
-    "桂花のコメント"
+    "日付","就寝時刻","起床時刻","睡眠時間",
+    "精神的要求（Mental Demand）","身体的要求（Physical Demand）","時間的要求（Temporal Demand）",
+    "努力度（Effort）","成果満足度（Performance）","フラストレーション（Frustration）",
+    "体調サイン","取り組んだこと","ストレッサー",
+    "シノアのコメント","桂花のコメント",
 ]
 
 # --- Google Sheets連携 ---
@@ -153,81 +143,84 @@ def parse_time(s):
     except:
         return None
 
-def save_to_google_sheets(df: pd.DataFrame, spreadsheet_name: str, worksheet_name: str = "2025"):
-    """
-    指定されたスプレッドシートとシートに DataFrame を保存する。
-    同じ日付のデータがあれば上書き、なければ追加（Upsert）。
-    """
+def _force_header(sheet):
+    sheet.resize(rows=1000, cols=len(EXPECTED_HEADERS))
+    sheet.update("A1", [EXPECTED_HEADERS], value_input_option="USER_ENTERED")
 
-    # --- 0) 事前チェック ---
+def _safe_get_all_records(sheet):
+    try:
+        return sheet.get_all_records(default_blank="")
+    except Exception:
+        # ヘッダー不正などで落ちたら矯正して空として扱う
+        _force_header(sheet)
+        return []
+
+def save_to_google_sheets(df, spreadsheet_name: str, worksheet_name: str):
+    """
+    1行の DataFrame を Google Sheets に Upsert（同日付があれば上書き、無ければ追記）。
+    - ヘッダー（1行目）は常に新スキーマに強制整備
+    - get_all_records() は例外安全で呼ぶ
+    - 期待列順に並べて書き込む
+    """
+    # --- 依存を関数内でimport（他所の命名衝突を避ける） ---
+    import re
+    import numpy as np
+    import pandas as pd
+    import streamlit as st
+    from datetime import datetime, date, time
+    import gspread
+    from gspread.exceptions import WorksheetNotFound
+    from google.oauth2.service_account import Credentials
+
+    # --- 期待ヘッダー（新スキーマ） ---
+    EXPECTED_HEADERS = [
+        "日付", "就寝時刻", "起床時刻", "睡眠時間",
+        "精神的要求（Mental Demand）", "身体的要求（Physical Demand）", "時間的要求（Temporal Demand）",
+        "努力度（Effort）", "成果満足度（Performance）", "フラストレーション（Frustration）",
+        "体調サイン", "取り組んだこと", "ストレッサー",
+        "シノアのコメント", "桂花のコメント",
+    ]
+
+    # --- 早期バリデーション ---
     if df is None or df.empty:
-        st.warning("保存対象のデータフレームが空です。処理をスキップしました。")
+        st.warning("保存対象のDataFrameが空です。処理をスキップしました。")
         return
     if "日付" not in df.columns:
-        st.error("DataFrame に『日付』列がありません。")
+        st.error("DataFrameに『日付』列がありません。")
         return
 
-    # --- 1) 認証（Secretsから） ---
-    scope = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
-    try:
-        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
-    except KeyError:
-        st.error("Secrets に gcp_service_account が設定されていません。Settings → Secrets を確認してください。")
-        st.stop()
-    client = gspread.authorize(creds)
+    # --- 小さなユーティリティ ---
+    def _normalize_row(vals):
+        out = []
+        for v in vals:
+            s = str(v)
+            s = s.replace("\u3000", " ").replace("　", " ")
+            s = s.replace("（", "(").replace("）", ")")
+            s = re.sub(r"\s+", " ", s).strip()
+            out.append(s)
+        return out
 
-    # --- 2) ワークシート取得（無ければ作成・ヘッダー初期化） ---
-    sh = client.open(spreadsheet_name)
-    try:
-        sheet = sh.worksheet(worksheet_name)
-    except WorksheetNotFound:
-        sheet = sh.add_worksheet(title=worksheet_name, rows=1000, cols=max(26, len(df.columns)))
-        sheet.update("A1", [list(df.columns)], value_input_option="USER_ENTERED")
+    def _force_header(sheet):
+        sheet.resize(rows=1000, cols=len(EXPECTED_HEADERS))
+        sheet.update("A1", [EXPECTED_HEADERS], value_input_option="USER_ENTERED")
 
-    # シートのヘッダー
-    header = sheet.row_values(1)
-    if not header:
-        header = list(df.columns)
-        sheet.update("A1", [header], value_input_option="USER_ENTERED")
+    def _safe_get_all_records(sheet):
+        try:
+            return sheet.get_all_records(default_blank="")
+        except Exception:
+            _force_header(sheet)
+            return []
 
-    # --- 3) 既存レコード取得（辞書→DataFrame） ---
-    records = sheet.get_all_records()  # 空なら []
-    existing_df = pd.DataFrame(records)
-    if existing_df.empty:
-        existing_df = pd.DataFrame(columns=header)
-
-    # --- 4) 新規行（1行想定）を取り出し ---
-    new_row = df.iloc[0].copy()
-
-    # --- 5) 日付を date 粒度で正規化し、Upsert対象を特定 ---
     def _to_date_scalar(v):
         if isinstance(v, (datetime, pd.Timestamp)):
             return v.date()
         if isinstance(v, date):
             return v
-        # 文字列や他型は to_datetime で解釈
         try:
             return pd.to_datetime(v, errors="coerce").date()
         except Exception:
             return None
 
-    new_date = _to_date_scalar(new_row.get("日付"))
-    if new_date is None:
-        st.error("『日付』の解釈に失敗しました。yyyy-mm-dd 形式などで指定してください。")
-        return
-
-    if "日付" in existing_df.columns and not existing_df.empty:
-        existing_df["日付"] = pd.to_datetime(existing_df["日付"], errors="coerce").dt.date
-        match_idx_list = existing_df.index[existing_df["日付"] == new_date].tolist()
-    else:
-        match_idx_list = []
-
-    row_number = (match_idx_list[0] + 2) if match_idx_list else None  # ヘッダー1行ぶん+1
-
-    # --- 6) JSON化できる値に正規化 ---
     def _to_jsonable(v):
         if v is None:
             return ""
@@ -237,7 +230,6 @@ def save_to_google_sheets(df: pd.DataFrame, spreadsheet_name: str, worksheet_nam
             return ""
         if isinstance(v, (np.integer, np.floating)):
             return v.item()
-        # NaN/NaT
         try:
             if pd.isna(v):
                 return ""
@@ -245,15 +237,85 @@ def save_to_google_sheets(df: pd.DataFrame, spreadsheet_name: str, worksheet_nam
             pass
         return v if isinstance(v, (str, int, float, bool)) else str(v)
 
-    # シートのヘッダー順に並べ替え＆正規化
-    ordered = [_to_jsonable(new_row.get(col, "")) for col in header]
+    # --- 認証（Secrets: gcp_service_account を使用） ---
+    scope = ["https://www.googleapis.com/auth/spreadsheets",
+             "https://www.googleapis.com/auth/drive"]
+    try:
+        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+    except KeyError:
+        st.error("Secrets に gcp_service_account がありません。Settings → Secrets を確認してください。")
+        return
+    client = gspread.authorize(creds)
 
-    # --- 7) 上書き or 追加 ---
-    if row_number:
-        end_col = rowcol_to_a1(1, len(header))[:-1]  # 'D1' -> 'D'
-        rng = f"A{row_number}:{end_col}{row_number}"
+    # --- Spreadsheet / Worksheet を取得（なければ作成） ---
+    sh = client.open(spreadsheet_name)
+    try:
+        sheet = sh.worksheet(worksheet_name)
+    except WorksheetNotFound:
+        sheet = sh.add_worksheet(title=worksheet_name, rows=1000, cols=len(EXPECTED_HEADERS))
+        _force_header(sheet)
+
+    # --- 読む前に必ずヘッダーを矯正 ---
+    values = sheet.get_all_values()
+    if not values or not any(str(c).strip() for c in values[0]):
+        _force_header(sheet)
+        existing_records = []
+    else:
+        header_now = _normalize_row(values[0])
+        header_exp = _normalize_row(EXPECTED_HEADERS)
+        if header_now != header_exp:
+            _force_header(sheet)
+            existing_records = []
+        else:
+            existing_records = _safe_get_all_records(sheet)
+
+    existing_df = pd.DataFrame(existing_records)
+    if existing_df.empty:
+        existing_df = pd.DataFrame(columns=EXPECTED_HEADERS)
+    else:
+        for c in EXPECTED_HEADERS:
+            if c not in existing_df.columns:
+                existing_df[c] = ""
+
+    # --- 新規行（dfの先頭行）を準備 ---
+    new_row = df.iloc[0].copy()
+
+    # 日付で Upsert 対象の行番号を決める
+    new_date = _to_date_scalar(new_row.get("日付"))
+    if new_date is None:
+        st.error("『日付』の解釈に失敗しました（yyyy-mm-dd 等）。")
+        return
+
+    if not existing_df.empty and "日付" in existing_df.columns:
+        existing_df["日付"] = pd.to_datetime(existing_df["日付"], errors="coerce").dt.date
+        match_idx_list = existing_df.index[existing_df["日付"] == new_date].tolist()
+    else:
+        match_idx_list = []
+
+    # ヘッダー順に値を並べ替え
+    ordered = [_to_jsonable(new_row.get(col, "")) for col in EXPECTED_HEADERS]
+
+    # --- 上書き or 追記 ---
+    if match_idx_list:
+        # 上書き：ヘッダーが1行目なので +2 でシート行番号
+        row_number = match_idx_list[0] + 2
+        # 'A' から必要列数分の範囲を作る（A〜）
+        # 例：15列なら 'O' まで
+        start_col = 1
+        end_col = len(EXPECTED_HEADERS)
+
+        # 簡易的な列番号→列名（A1表記）変換
+        def _col_to_a1(cn: int) -> str:
+            s = ""
+            while cn > 0:
+                cn, r = divmod(cn - 1, 26)
+                s = chr(65 + r) + s
+            return s
+
+        rng = f"A{row_number}:{_col_to_a1(end_col)}{row_number}"
         sheet.update(rng, [ordered], value_input_option="USER_ENTERED")
     else:
+        # 追記
         sheet.append_row(ordered, value_input_option="USER_ENTERED")
 
 # --- アドバイス生成（仮） ---
