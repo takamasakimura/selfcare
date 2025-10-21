@@ -1,24 +1,37 @@
 # -*- coding: utf-8 -*-
 import streamlit as st, pandas as pd, altair as alt
-from datetime import timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from utils import load_data, hhmm_to_minutes, signed_circ_diff_minutes, require_passcode
 
-st.set_page_config(page_title="セルフケア・レポート", page_icon="📊", layout="wide")
-st.title("📊 セルフケア・レポート")
+JST = ZoneInfo("Asia/Tokyo")
 
-require_passcode(page_name="report")
+st.set_page_config(page_title="睡眠偏差グラフ", page_icon="⏰", layout="wide")
+st.title("⏰ 睡眠偏差グラフ（就寝/起床のベースラインからのズレ）")
+
+require_passcode(page_name="graph")
 
 opts = ["7日","30日","90日","期間指定"]
 sel = st.radio("期間", opts, index=1, horizontal=True)
 start_override = end_override = None
 if sel == "期間指定":
+    today = datetime.now(JST).date()
     c1,c2 = st.columns(2)
-    with c1: start_override = st.date_input("開始日")
-    with c2: end_override = st.date_input("終了日")
+    with c1: start_override = st.date_input("開始日", value=today - timedelta(days=29))
+    with c2: end_override = st.date_input("終了日", value=today)
 
-df = load_data("care-log", None)
+this_year = datetime.now(JST).year
+dfs = []
+for y in (this_year-1, this_year):
+    try:
+        d = load_data("care-log", str(y))
+        if not d.empty: dfs.append(d)
+    except Exception: pass
+df = pd.concat(dfs, ignore_index=True) if dfs else load_data("care-log", None)
+
 if df.empty or "日付" not in df.columns:
     st.info("まだデータがありません。入力ページから保存してください。"); st.stop()
+
 df = df.copy().dropna(subset=["日付"]).sort_values("日付")
 last_day = df["日付"].max().normalize()
 if sel=="7日": start_day = last_day - timedelta(days=6)
@@ -29,8 +42,6 @@ else:
     last_day  = pd.to_datetime(end_override) if end_override is not None else last_day
 recent = df[df["日付"].between(start_day, last_day)]
 
-st.subheader("睡眠時刻のベースライン偏差（±3h）")
-st.caption("基準: 就寝21:00 / 起床04:00")
 BASE_SLEEP, BASE_WAKE = 21*60, 4*60
 
 def pick_sleep_minutes(row):
@@ -50,6 +61,7 @@ for _, r in recent.iterrows():
     wd = signed_circ_diff_minutes(w, BASE_WAKE)
     rows.append({"日付": r["日付"].date(), "就寝偏差(h)": sd/60 if sd is not None else None, "起床偏差(h)": wd/60 if wd is not None else None})
 dev = pd.DataFrame(rows).dropna(how="all", subset=["就寝偏差(h)","起床偏差(h)"])
+
 if not dev.empty:
     mdf = dev.melt(id_vars=["日付"], var_name="系列", value_name="偏差時間(h)")
     zero = alt.Chart(pd.DataFrame({"y":[0]})).mark_rule(strokeDash=[4,4]).encode(y="y:Q")
@@ -58,17 +70,5 @@ if not dev.empty:
 else:
     st.caption("睡眠データが不足しています。")
 
-st.markdown("---")
-tlx_cols = ["精神的要求（Mental Demand）","身体的要求（Physical Demand）","時間的要求（Temporal Demand）","努力度（Effort）","成果満足度（Performance）","フラストレーション（Frustration）"]
-for c in tlx_cols:
-    if c not in recent.columns: recent[c] = 0
-recent["NASA_TLX_平均"] = recent[tlx_cols].apply(pd.to_numeric, errors="coerce").mean(axis=1)
-c1,c2,c3 = st.columns(3)
-with c1: st.metric("対象件数", f"{len(recent)}")
-with c2: st.metric("最新日のTLX平均", f"{recent.iloc[-1]['NASA_TLX_平均']:.2f}" if len(recent)>0 else "—")
-with c3: st.metric("期間平均TLX", f"{recent['NASA_TLX_平均'].mean():.2f}" if len(recent)>0 else "—")
-line = alt.Chart(recent).mark_line(point=True).encode(x="日付:T", y="NASA_TLX_平均:Q", tooltip=["日付:T","NASA_TLX_平均:Q"])
-st.altair_chart(line, use_container_width=True)
-avg_df = recent[tlx_cols].apply(pd.to_numeric, errors="coerce").mean().reset_index(); avg_df.columns=["ディメンション","平均"]
-bar = alt.Chart(avg_df).mark_bar().encode(x="ディメンション:N", y="平均:Q", tooltip=["ディメンション","平均"])
-st.altair_chart(bar, use_container_width=True)
+with st.expander("データを表示"):
+    st.dataframe(dev, use_container_width=True)

@@ -1,5 +1,6 @@
-streamlit
-pandas
-gspread
-oauth2client
-google-auth
+streamlit==1.38.0
+pandas==2.2.2
+altair==5.3.0
+numpy==2.1.2
+gspread==6.1.2
+google-auth==2.34.0
